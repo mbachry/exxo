@@ -2,18 +2,16 @@
 exxo
 ===============================
 
-.. image:: https://img.shields.io/travis/mbachry/exxo.svg
-        :target: https://travis-ci.org/mbachry/exxo
+*EXPERIMENTAL*
 
-.. image:: https://img.shields.io/pypi/v/exxo.svg
-        :target: https://pypi.python.org/pypi/exxo
+Build portable, (mostly) statically linked Python binaries.
 
+Python 3.5 required.
 
-Exxo description (TODO)
+Bootstrap (you must install regular Python build dependencies first):
 
-* Free software: Python Software Foundation License
+    python3 -m exxo.bootstrap
 
-Features
---------
+Build binary:
 
-* TODO
+    python3 -m exxo.exxo sentry_launcher sentry_launcher.m:main /tmp/bar

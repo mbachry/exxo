@@ -1,0 +1,199 @@
+diff --git a/PyRun/Runtime/Setup.PyRun-3.4 b/PyRun/Runtime/Setup.PyRun-3.4
+index 47629a2..5f32215 100644
+--- a/PyRun/Runtime/Setup.PyRun-3.4
++++ b/PyRun/Runtime/Setup.PyRun-3.4
+@@ -208,7 +208,7 @@ _socket socketmodule.c
+ SSL=/usr
+ _ssl _ssl.c \
+ 	-DUSE_SSL -I$(SSL)/include -I$(SSL)/include/openssl \
+-	-L$(SSL)/lib64 -lssl -lcrypto
++	-L$(SSL)/lib64 -Wl,-Bstatic -lssl -lcrypto -Wl,-Bdynamic
+ 
+ # The crypt module is now disabled by default because it breaks builds
+ # on many systems (where -lcrypt is needed), e.g. Linux (I believe).
+@@ -359,7 +359,7 @@ binascii binascii.c
+ # Andrew Kuchling's zlib module.
+ # This require zlib 1.1.3 (or later).
+ # See http://www.gzip.org/zlib/
+-zlib zlibmodule.c -I$(prefix)/include -L$(exec_prefix)/lib -lz
++zlib zlibmodule.c -I$(prefix)/include -L$(exec_prefix)/lib -Wl,-Bstatic -lz -Wl,-Bdynamic
+ 
+ # Interface to the Expat XML parser
+ #
+@@ -427,7 +427,7 @@ _opcode _opcode.c
+ # _ctypes needs to build libffi first - punting on this
+ 
+ # _hashlib
+-_hashlib _hashopenssl.c -I$(SSL)/include -L$(SSL)/lib64 -L$(SSL)/lib -lssl -lcrypto
++_hashlib _hashopenssl.c -I$(SSL)/include -L$(SSL)/lib64 -L$(SSL)/lib -Wl,-Bstatic -lssl -lcrypto -Wl,-Bdynamic
+ 
+ # _lsprof
+ _lsprof _lsprof.c rotatingtree.c
+@@ -449,10 +449,71 @@ _sqlite3 \
+ 	$(SQLITE_DEFS) -I$(srcdir)/Modules/_sqlite \
+ 	$(SQLITE_LIBS) \
+ 	-I$(prefix)/include -L$(exec_prefix)/lib \
+-	-lsqlite3
++	-Wl,-Bstatic -lsqlite3 -Wl,-Bdynamic
+ 
+ # bz2
+-_bz2 _bz2module.c -lbz2
++_bz2 _bz2module.c -Wl,-Bstatic -lbz2 -Wl,-Bdynamic
+ 
+ # _json
+ _json _json.c
++
++_multiprocessing \
++	_multiprocessing/multiprocessing.c \
++	_multiprocessing/semaphore.c
++
++_ctypes \
++	_ctypes/_ctypes.c \
++	_ctypes/callbacks.c \
++	_ctypes/callproc.c \
++	_ctypes/stgdict.c \
++	_ctypes/cfield.c \
++	_ctypes/libffi/src/prep_cif.c \
++	_ctypes/libffi/src/closures.c \
++	_ctypes/libffi/src/x86/ffi64.c \
++	_ctypes/libffi/src/x86/unix64.S \
++	_ctypes/libffi/src/x86/ffi.c \
++	_ctypes/libffi/src/x86/sysv.S \
++	-I$(srcdir)/Modules/_ctypes/libffi/src \
++	-I$(srcdir)/Modules/_ctypes/libffi/include \
++	-I$(srcdir)/build/temp.linux-x86_64-3.4/libffi
++
++spwd spwdmodule.c
++
++audioop audioop.c
++
++ossaudiodev ossaudiodev.c
++
++readline readline.c -Wl,-Bstatic -lreadline -ltermcap -Wl,-Bdynamic
++
++_crypt _cryptmodule.c -Wl,-Bstatic -lcrypt -Wl,-Bdynamic
++
++nis nismodule.c -Wl,-Bstatic -lnsl -Wl,-Bdynamic
++
++# _curses _cursesmodule.c -Wl,-Bstatic -lcurses -ltermcap -Wl,-Bdynamic
++# _curses_panel _curses_panel.c -Wl,-Bstatic -lpanel -lncurses -Wl,-Bdynamic
++_curses _cursesmodule.c -Wl,-lcurses -Bstatic -ltermcap -Wl,-Bdynamic
++_curses_panel _curses_panel.c -lncurses -Wl,-Bstatic -lpanel -Wl,-Bdynamic
++
++DECIMAL_DEFS=-DCONFIG_64=1 -DASM=1
++_decimal \
++	_decimal/_decimal.c \
++	_decimal/libmpdec/basearith.c \
++	_decimal/libmpdec/constants.c \
++	_decimal/libmpdec/context.c \
++	_decimal/libmpdec/convolute.c \
++	_decimal/libmpdec/crt.c \
++	_decimal/libmpdec/difradix2.c \
++	_decimal/libmpdec/fnt.c \
++	_decimal/libmpdec/fourstep.c \
++	_decimal/libmpdec/io.c \
++	_decimal/libmpdec/memory.c \
++	_decimal/libmpdec/mpdecimal.c \
++	_decimal/libmpdec/numbertheory.c \
++	_decimal/libmpdec/sixstep.c \
++	_decimal/libmpdec/transpose.c \
++	$(DECIMAL_DEFS) \
++	-I$(srcdir)/Modules/_decimal \
++	-I$(srcdir)/Modules/_decimal/libmpdec \
++	-I$(prefix)/include -L$(exec_prefix)/lib
++
++parser parsermodule.c
+diff --git a/PyRun/Runtime/freeze-3/freeze.py b/PyRun/Runtime/freeze-3/freeze.py
+index a52124c..08f1318 100755
+--- a/PyRun/Runtime/freeze-3/freeze.py
++++ b/PyRun/Runtime/freeze-3/freeze.py
+@@ -238,6 +238,7 @@ def main():
+     for module in ('site', 'warnings', 'encodings.utf_8', 'encodings.latin_1'):
+         if module not in exclude:
+             implicits.append(module)
++    implicits.append('parser')
+ 
+     # default prefix and exec_prefix
+     if not exec_prefix:
+diff --git a/PyRun/Runtime/pyrun_template.py b/PyRun/Runtime/pyrun_template.py
+index 983a6ca..e03c0a8 100644
+--- a/PyRun/Runtime/pyrun_template.py
++++ b/PyRun/Runtime/pyrun_template.py
+@@ -58,6 +58,7 @@ from pyrun_config import (
+     pyrun_prefix,
+     pyrun_bindir,
+     )
++import struct
+ 
+ ### Globals
+ 
+@@ -82,6 +83,8 @@ pyrun_hashrandomization = False
+ PY2 = (sys.version_info[0] == 2)
+ PY3 = (sys.version_info[0] == 3)
+ 
++zip_packer = struct.Struct('IQ')
++
+ if PY2:
+     # Emulate Python 3 exec() function
+     def run_code(code, globals_dict, locals_dict=None):
+@@ -725,6 +728,14 @@ def pyrun_execute_script(pyrun_script, mode='file'):
+     else:
+         raise TypeError('unknown execution mode %r' % mode)
+ 
++
++def try_read_zip_index():
++    with open(sys.executable, 'rb') as fp:
++        fp.seek(-zip_packer.size, os.SEEK_END)
++        magic, pos = zip_packer.unpack(fp.read())
++    return (None if magic != 0xdeadbeef else pos)
++
++
+ ### Entry point
+ 
+ if __name__ == '__main__':
+@@ -743,8 +754,10 @@ if __name__ == '__main__':
+     if pyrun_debug > 1:
+         pyrun_info()
+ 
++    pyrun_zipindex = try_read_zip_index()
++
+     # Start the runtime
+-    if not sys.argv and sys.stdin.isatty():
++    if not sys.argv and sys.stdin.isatty() and not pyrun_zipindex:
+ 
+         ### Enter interactive mode
+ 
+@@ -768,7 +781,11 @@ if __name__ == '__main__':
+         ### Run a script
+ 
+         # Setup script to run
+-        if not sys.argv:
++        if pyrun_zipindex:
++            exe_size = os.path.getsize(sys.executable)
++            pyrun_script = (sys.executable, pyrun_zipindex, exe_size - zip_packer.size)
++            sys.argv.insert(0, sys.executable)
++        elif not sys.argv:
+             # Filter mode: read the script from stdin
+             if pyrun_as_string or pyrun_as_module:
+                 # Missing script argument
+@@ -792,6 +809,8 @@ if __name__ == '__main__':
+ 
+         # Setup paths & mode
+         script_path = pyrun_script
++        if isinstance(script_path, tuple):
++            script_path = script_path[0]
+         if pyrun_as_module:
+             mode = 'module'
+             script_path = None
+@@ -802,8 +821,9 @@ if __name__ == '__main__':
+             if pyrun_version < '2.7.0':
+                 mode = 'file'
+             # Python 2.7 and later
+-            elif (pyrun_script.endswith('.py') or
+-                  pyrun_script.endswith('.pyw')):
++            elif (hasattr(pyrun_script, 'endswith') and
++                  (pyrun_script.endswith('.py') or
++                   pyrun_script.endswith('.pyw'))):
+                 mode = 'file'
+             else:
+                 # Use path mode for all other files, since this
