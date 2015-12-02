@@ -1,0 +1,363 @@
+diff --git a/Modules/makesetup b/Modules/makesetup
+index 8862c36..2afec2d 100755
+--- a/Modules/makesetup
++++ b/Modules/makesetup
+@@ -176,6 +176,7 @@ sed -e 's/[ 	]*#.*//' -e '/^[ 	]*$/d' |
+ 			*.c++)		srcs="$srcs $arg";;
+ 			*.cxx)		srcs="$srcs $arg";;
+ 			*.cpp)		srcs="$srcs $arg";;
++			*.S)		srcs="$srcs $arg";;
+ 			\$*)		libs="$libs $arg"
+ 					cpps="$cpps $arg";;
+ 			*.*)		echo 1>&2 "bad word $arg in $line"
+@@ -206,6 +207,7 @@ sed -e 's/[ 	]*#.*//' -e '/^[ 	]*$/d' |
+ 			*.cxx) obj=`basename $src .cxx`.o; cc='$(CXX)';;
+ 			*.cpp) obj=`basename $src .cpp`.o; cc='$(CXX)';;
+ 			*.m)   obj=`basename $src .m`.o; cc='$(CC)';; # Obj-C
++			*.S)   obj=`basename $src .S`.o; cc='$(CC)';;
+ 			*)     continue;;
+ 			esac
+ 			obj="$srcdir/$obj"
+diff --git a/Modules/zipimport.c b/Modules/zipimport.c
+index 7240cb4..edc8a3b 100644
+--- a/Modules/zipimport.c
++++ b/Modules/zipimport.c
+@@ -2,15 +2,18 @@
+ #include "structmember.h"
+ #include "osdefs.h"
+ #include "marshal.h"
++#include "../Python/importdl.h"
+ #include <time.h>
++#include <assert.h>
+ 
+ 
+ #define IS_SOURCE   0x0
+ #define IS_BYTECODE 0x1
+ #define IS_PACKAGE  0x2
++#define IS_SOLIB    0x4
+ 
+ struct st_zip_searchorder {
+-    char suffix[14];
++    char suffix[64];
+     int type;
+ };
+ 
+@@ -19,15 +22,20 @@ struct st_zip_searchorder {
+    non-package .pyc, .pyo and .py entries. The .pyc and .pyo entries
+    are swapped by initzipimport() if we run in optimized mode. Also,
+    '/' is replaced by SEP there. */
+-static struct st_zip_searchorder zip_searchorder[] = {
++static struct st_zip_searchorder *zip_searchorder;
++static struct st_zip_searchorder zip_searchorder_base[] = {
+     {"/__init__.pyc", IS_PACKAGE | IS_BYTECODE},
+     {"/__init__.pyo", IS_PACKAGE | IS_BYTECODE},
+     {"/__init__.py", IS_PACKAGE | IS_SOURCE},
+     {".pyc", IS_BYTECODE},
+     {".pyo", IS_BYTECODE},
+-    {".py", IS_SOURCE},
+-    {"", 0}
++    {".py", IS_SOURCE}
+ };
++static const int zip_searchorder_base_len = sizeof(zip_searchorder_base) / sizeof(zip_searchorder_base[0]);
++
++extern PyObject *
++_PyImport_LoadDynamicModule(char *name, char *pathname, FILE *fp);
++extern const struct filedescr _PyImport_DynLoadFiletab[];
+ 
+ /* zipimporter object definition and support */
+ 
+@@ -38,13 +46,14 @@ struct _zipimporter {
+     PyObject *archive;  /* pathname of the Zip archive */
+     PyObject *prefix;   /* file prefix: "a/sub/directory/" */
+     PyObject *files;    /* dict with file info {path: toc_entry} */
++    Py_ssize_t start_offset, end_offset;
+ };
+ 
+ static PyObject *ZipImportError;
+ static PyObject *zip_directory_cache = NULL;
+ 
+ /* forward decls */
+-static PyObject *read_directory(char *archive);
++static PyObject *read_directory(char *archive, Py_ssize_t start_offset, Py_ssize_t end_offset);
+ static PyObject *get_data(char *archive, PyObject *toc_entry);
+ static PyObject *get_module_code(ZipImporter *self, char *fullname,
+                                  int *p_ispackage, char **p_modpath);
+@@ -60,16 +69,46 @@ static PyObject *get_module_code(ZipImporter *self, char *fullname,
+ static int
+ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
+ {
++    PyObject *arg;
+     char *path, *p, *prefix, buf[MAXPATHLEN+2];
+     size_t len;
+ 
+     if (!_PyArg_NoKeywords("zipimporter()", kwds))
+         return -1;
+ 
+-    if (!PyArg_ParseTuple(args, "s:zipimporter",
+-                          &path))
++    if (!PyArg_ParseTuple(args, "O:zipimporter",
++                          &arg))
+         return -1;
+ 
++    if (!PyTuple_Check(arg)) {
++        /* TODO: a bit lame */
++        if (!PyArg_ParseTuple(args, "s:zipimporter",
++                              &path))
++            return -1;
++        self->start_offset = 0;
++        self->end_offset = 0;
++    } else {
++        PyObject *pathobj;
++        PyObject *i;
++
++        pathobj = PyTuple_GetItem(arg, 0);
++        if (!pathobj)
++            return -1;
++        path = PyString_AsString(pathobj);
++
++        i = PyTuple_GetItem(arg, 1);
++        if (!i)
++            return -1;
++        self->start_offset = PyLong_AsLong(i);
++        /* TODO: check for error? */
++
++        i = PyTuple_GetItem(arg, 2);
++        if (!i)
++            return -1;
++        self->end_offset = PyLong_AsLong(i);
++        /* TODO: check for error? */
++    }
++
+     len = strlen(path);
+     if (len == 0) {
+         PyErr_SetString(ZipImportError, "archive path is empty");
+@@ -99,9 +138,12 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
+         rv = stat(buf, &statbuf);
+         if (rv == 0) {
+             /* it exists */
+-            if (S_ISREG(statbuf.st_mode))
++            if (S_ISREG(statbuf.st_mode)) {
+                 /* it's a file */
+                 path = buf;
++                if (self->end_offset == 0)
++                    self->end_offset = statbuf.st_size;
++            }
+             break;
+         }
+ #else
+@@ -126,7 +168,7 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
+         PyObject *files;
+         files = PyDict_GetItemString(zip_directory_cache, path);
+         if (files == NULL) {
+-            files = read_directory(buf);
++            files = read_directory(buf, self->start_offset, self->end_offset);
+             if (files == NULL)
+                 return -1;
+             if (PyDict_SetItemString(zip_directory_cache, path,
+@@ -304,6 +346,85 @@ zipimporter_find_module(PyObject *obj, PyObject *args)
+     return (PyObject *)self;
+ }
+ 
++static PyObject *
++import_solib(char *fullname, PyObject *source)
++{
++    PyObject *mod = NULL;
++    char tmpbuf[] = "/tmp/zipimportXXXXXX";
++    char *src;
++    int tmp;
++    Py_ssize_t srclen;
++
++    tmp = mkstemp(tmpbuf);
++    if (tmp < 0) {
++        PyErr_SetFromErrnoWithFilename(PyExc_OSError, tmpbuf);
++        return NULL;
++    }
++
++    if (PyString_AsStringAndSize(source, &src, &srclen) < 0)
++        goto exit;
++
++    while (srclen) {
++        int wrote = write(tmp, src, srclen);
++        if (wrote < 0) {
++            PyErr_SetFromErrnoWithFilename(PyExc_OSError, tmpbuf);
++            goto exit;
++        }
++        src += wrote;
++        srclen -= wrote;
++    }
++
++    mod = _PyImport_LoadDynamicModule(fullname, tmpbuf, NULL);
++
++exit:
++    close(tmp);
++    /* unlink(tmpbuf); */
++    return mod;
++}
++
++static PyObject *
++maybe_import_solib(ZipImporter *self, char *fullname)
++{
++    PyObject *fullpath;
++    PyObject *toc_entry = NULL, *data, *mod;
++    char path[MAXPATHLEN + 1];
++    char *subname;
++    const struct filedescr *desc;
++    int pathlen;
++
++    subname = get_subname(fullname);
++    if (subname == NULL)
++        Py_RETURN_NONE;
++
++    pathlen = make_filename(PyString_AsString(self->prefix), subname, path);
++    if (pathlen < 0)
++        Py_RETURN_NONE;
++
++    for (desc = _PyImport_DynLoadFiletab; desc->suffix != NULL; desc++) {
++        fullpath = PyString_FromFormat("%s%s", path, desc->suffix);
++        if (fullpath == NULL) {
++            Py_RETURN_NONE;
++        }
++
++        toc_entry = PyDict_GetItem(self->files, fullpath);
++        Py_DECREF(fullpath);
++        if (toc_entry != NULL)
++            break;
++    }
++    if (toc_entry == NULL)
++        return NULL;
++
++    data = get_data(PyString_AsString(self->archive), toc_entry);
++    if (data == NULL)
++        Py_RETURN_NONE;
++
++    mod = import_solib(fullname, data);
++    Py_DECREF(data);
++    if (!mod)
++        Py_RETURN_NONE;
++    return mod;
++}
++
+ /* Load and return the module named by 'fullname'. */
+ static PyObject *
+ zipimporter_load_module(PyObject *obj, PyObject *args)
+@@ -317,6 +438,14 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
+                           &fullname))
+         return NULL;
+ 
++    mod = maybe_import_solib(self, fullname);
++    if (mod) {
++        if (mod == Py_None)
++            return NULL;
++        Py_DECREF(fullname);
++        return mod;
++    }
++
+     code = get_module_code(self, fullname, &ispackage, &modpath);
+     if (code == NULL)
+         return NULL;
+@@ -683,7 +812,7 @@ get_long(unsigned char *buf) {
+    data_size and file_offset are 0.
+ */
+ static PyObject *
+-read_directory(char *archive)
++read_directory(char *archive, Py_ssize_t start_offset, Py_ssize_t end_offset)
+ {
+     PyObject *files = NULL;
+     FILE *fp;
+@@ -710,7 +839,7 @@ read_directory(char *archive)
+         return NULL;
+     }
+ 
+-    if (fseek(fp, -22, SEEK_END) == -1) {
++    if (fseek(fp, end_offset - 22, SEEK_SET) == -1) {
+         fclose(fp);
+         PyErr_Format(ZipImportError, "can't read Zip file: %s", archive);
+         return NULL;
+@@ -1168,6 +1297,16 @@ get_module_code(ZipImporter *self, char *fullname,
+                 mtime = get_mtime_of_source(self, path);
+             if (p_ispackage != NULL)
+                 *p_ispackage = ispackage;
++
++            if (zso->type & IS_SOLIB) {
++                if (p_modpath != NULL) {
++                    PyObject *modpathobj = PyTuple_GetItem(toc_entry, 0);
++                    Py_INCREF(p_modpath);
++                    *p_modpath = PyString_AsString(modpathobj);
++                }
++                return NULL;
++            }
++
+             code = get_code_from_data(self, ispackage,
+                                       isbytecode, mtime,
+                                       toc_entry);
+@@ -1187,6 +1326,60 @@ get_module_code(ZipImporter *self, char *fullname,
+     return NULL;
+ }
+ 
++static Py_ssize_t get_dynload_file_tab_len(void)
++{
++    int i = 0;
++    while (_PyImport_DynLoadFiletab[i].suffix)
++        i++;
++    return i;
++}
++
++static int init_search_order(void)
++{
++    struct st_zip_searchorder *zso;
++    const struct filedescr *desc;
++    int i;
++
++     /* Correct directory separator */
++    zip_searchorder_base[0].suffix[0] = SEP;
++    zip_searchorder_base[1].suffix[0] = SEP;
++    zip_searchorder_base[2].suffix[0] = SEP;
++     if (Py_OptimizeFlag) {
++         /* Reverse *.pyc and *.pyo */
++         struct st_zip_searchorder tmp;
++        tmp = zip_searchorder_base[0];
++        zip_searchorder_base[0] = zip_searchorder_base[1];
++        zip_searchorder_base[1] = tmp;
++        tmp = zip_searchorder_base[3];
++        zip_searchorder_base[3] = zip_searchorder_base[4];
++        zip_searchorder_base[4] = tmp;
++    }
++
++    zip_searchorder = PyMem_Malloc(sizeof(struct st_zip_searchorder) *
++                                   (zip_searchorder_base_len + get_dynload_file_tab_len() + 1));
++    if (zip_searchorder == NULL) {
++        PyErr_SetString(PyExc_MemoryError, "zipimport: out of memory");
++        return -1;
++    }
++
++    for (i = 0, zso = zip_searchorder_base; i < zip_searchorder_base_len; zso++, i++)
++        zip_searchorder[i] = *zso;
++
++    for (desc = _PyImport_DynLoadFiletab; desc->suffix != NULL; desc++) {
++        assert(strlen(desc->suffix) < sizeof(zso->suffix));
++        zso = &zip_searchorder[i];
++        memset(zso->suffix, 0, sizeof(zso->suffix));
++        strncpy(zso->suffix, desc->suffix, sizeof(zso->suffix) - 1);
++        zso->type = IS_SOLIB;
++        i++;
++    }
++
++    /* sentinel */
++    zip_searchorder[i].suffix[0] = '\0';
++    zip_searchorder[i].type = 0;
++
++    return 0;
++}
+ 
+ /* Module init */
+ 
+@@ -1212,6 +1405,9 @@ initzipimport(void)
+     if (PyType_Ready(&ZipImporter_Type) < 0)
+         return;
+ 
++    if (init_search_order() < 0)
++        return;
++
+     /* Correct directory separator */
+     zip_searchorder[0].suffix[0] = SEP;
+     zip_searchorder[1].suffix[0] = SEP;

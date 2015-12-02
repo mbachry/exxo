@@ -1,3 +1,91 @@
+diff --git a/PyRun/Runtime/Setup.PyRun-2.7 b/PyRun/Runtime/Setup.PyRun-2.7
+index ad9ed96..9f2ec14 100644
+--- a/PyRun/Runtime/Setup.PyRun-2.7
++++ b/PyRun/Runtime/Setup.PyRun-2.7
+@@ -242,7 +242,7 @@ _socket socketmodule.c
+ SSL=/usr
+ _ssl _ssl.c \
+ 	-DUSE_SSL -I$(SSL)/include -I$(SSL)/include/openssl \
+-	-L$(SSL)/lib64 -L$(SSL)/lib -lssl -lcrypto
++	-L$(SSL)/lib64 -L$(SSL)/lib -Wl,-Bstatic -lssl -lcrypto -Wl,-Bdynamic
+ 
+ # The crypt module is now disabled by default because it breaks builds
+ # on many systems (where -lcrypt is needed), e.g. Linux (I believe).
+@@ -488,7 +488,7 @@ cPickle cPickle.c
+ # Andrew Kuchling's zlib module.
+ # This require zlib 1.1.3 (or later).
+ # See http://www.gzip.org/zlib/
+-zlib zlibmodule.c -I$(prefix)/include -L$(exec_prefix)/lib -lz
++zlib zlibmodule.c -I$(prefix)/include -L$(exec_prefix)/lib -Wl,-Bstatic -lz -Wl,-Bdynamic
+ 
+ # Interface to the Expat XML parser
+ #
+@@ -532,7 +532,7 @@ _codecs_tw cjkcodecs/_codecs_tw.c
+ # _ctypes needs to build libffi first - punting on this
+ 
+ # _hashlib
+-_hashlib _hashopenssl.c -I$(SSL)/include -L$(SSL)/lib64 -L$(SSL)/lib -lssl -lcrypto
++_hashlib _hashopenssl.c -I$(SSL)/include -L$(SSL)/lib64 -L$(SSL)/lib -Wl,-Bstatic -lssl -lcrypto -Wl,-Bdynamic
+ 
+ # _heapq
+ _heapq _heapqmodule.c
+@@ -560,10 +560,10 @@ _sqlite3 \
+ 	$(SQLITE_DEFS) -I$(srcdir)/Modules/_sqlite \
+ 	$(SQLITE_LIBS) \
+ 	-I$(prefix)/include -L$(exec_prefix)/lib \
+-	-lsqlite3
++	-Wl,-Bstatic -lsqlite3 -Wl,-Bdynamic
+ 
+ # bz2
+-bz2 bz2module.c -lbz2
++bz2 bz2module.c -Wl,-Bstatic -lbz2 -Wl,-Bdynamic
+ 
+ # _json
+ _json _json.c
+@@ -578,3 +578,43 @@ _io	-IModules/_io \
+ 
+ # _scproxy (used on Mac OS X only)
+ # @if macosx: _scproxy ../Mac/Modules/_scproxy.c -framework SystemConfiguration -framework CoreFoundation
++
++_multiprocessing \
++	_multiprocessing/multiprocessing.c \
++	_multiprocessing/semaphore.c \
++	_multiprocessing/socket_connection.c
++
++_ctypes \
++	_ctypes/_ctypes.c \
++	_ctypes/callbacks.c \
++	_ctypes/callproc.c \
++	_ctypes/stgdict.c \
++	_ctypes/cfield.c \
++	_ctypes/libffi/src/prep_cif.c \
++	_ctypes/libffi/src/closures.c \
++	_ctypes/libffi/src/x86/ffi64.c \
++	_ctypes/libffi/src/x86/unix64.S \
++	_ctypes/libffi/src/x86/ffi.c \
++	_ctypes/libffi/src/x86/sysv.S \
++	-I$(srcdir)/Modules/_ctypes/libffi/src \
++	-I$(srcdir)/Modules/_ctypes/libffi/include \
++	-I$(srcdir)/build/temp.linux-x86_64-2.7/libffi
++
++spwd spwdmodule.c
++
++audioop audioop.c
++
++ossaudiodev ossaudiodev.c
++
++readline readline.c -Wl,-Bstatic -lreadline -ltermcap -Wl,-Bdynamic
++
++crypt cryptmodule.c -Wl,-Bstatic -lcrypt -Wl,-Bdynamic
++
++nis nismodule.c -Wl,-Bstatic -lnsl -Wl,-Bdynamic
++
++# _curses _cursesmodule.c -Wl,-Bstatic -lcurses -ltermcap -Wl,-Bdynamic
++# _curses_panel _curses_panel.c -Wl,-Bstatic -lpanel -lncurses -Wl,-Bdynamic
++_curses _cursesmodule.c -Wl,-lcurses -Bstatic -ltermcap -Wl,-Bdynamic
++_curses_panel _curses_panel.c -lncurses -Wl,-Bstatic -lpanel -Wl,-Bdynamic
++
++parser parsermodule.c
 diff --git a/PyRun/Runtime/Setup.PyRun-3.4 b/PyRun/Runtime/Setup.PyRun-3.4
 index 47629a2..5f32215 100644
 --- a/PyRun/Runtime/Setup.PyRun-3.4
