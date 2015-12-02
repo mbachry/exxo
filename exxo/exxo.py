@@ -11,7 +11,6 @@ from pathlib import Path
 def create_binary(dst_path, pyrun, zip_file):
     packer = struct.Struct('IQ')
     pos = pyrun.stat().st_size
-    # make_t()
     with dst_path.open('wb') as dst_fp, pyrun.open('rb') as pyrun_fp, zip_file.open('rb') as zip_fp:
         shutil.copyfileobj(pyrun_fp, dst_fp)
         shutil.copyfileobj(zip_fp, dst_fp)
