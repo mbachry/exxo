@@ -1,21 +1,3 @@
-diff --git a/Lib/runpy.py b/Lib/runpy.py
-index 0bb57d7..6241cd5 100644
---- a/Lib/runpy.py
-+++ b/Lib/runpy.py
-@@ -226,7 +226,12 @@ def run_path(path_name, init_globals=None, run_name=None):
-     if run_name is None:
-         run_name = "<run_path>"
-     pkg_name = run_name.rpartition(".")[0]
--    importer = get_importer(path_name)
-+    if not isinstance(path_name, tuple):
-+        importer = get_importer(path_name)
-+    else:
-+        import zipimport
-+        importer = zipimport.zipimporter(path_name)
-+        path_name = path_name[0]
-     # Trying to avoid importing imp so as to not consume the deprecation warning.
-     is_NullImporter = False
-     if type(importer).__module__ == 'imp':
 diff --git a/Makefile.pre.in b/Makefile.pre.in
 index e19fc00..4d372e9 100644
 --- a/Makefile.pre.in
@@ -53,7 +35,7 @@ index 8b5cc28..8666e5c 100755
  			esac
  			obj="$srcdir/$obj"
 diff --git a/Modules/zipimport.c b/Modules/zipimport.c
-index f2cc245..b43d174 100644
+index f2cc245..9e61a86 100644
 --- a/Modules/zipimport.c
 +++ b/Modules/zipimport.c
 @@ -3,14 +3,16 @@
@@ -74,21 +56,21 @@ index f2cc245..b43d174 100644
      int type;
  };
  
-@@ -23,15 +25,24 @@ _Py_IDENTIFIER(replace);
+@@ -23,15 +25,20 @@ _Py_IDENTIFIER(replace);
     non-package .pyc, .pyo and .py entries. The .pyc and .pyo entries
     are swapped by initzipimport() if we run in optimized mode. Also,
     '/' is replaced by SEP there. */
 -static struct st_zip_searchorder zip_searchorder[] = {
+-    {"/__init__.pyc", IS_PACKAGE | IS_BYTECODE},
+-    {"/__init__.pyo", IS_PACKAGE | IS_BYTECODE},
+-    {"/__init__.py", IS_PACKAGE | IS_SOURCE},
 +static struct st_zip_searchorder *zip_searchorder;
 +static struct st_zip_searchorder zip_searchorder_base[] = {
 +    /* these two will be filled later in init_search_order() */
 +    {"", IS_PACKAGE | IS_BYTECODE},
 +    {"", IS_PACKAGE | IS_BYTECODE},
-     {"/__init__.pyc", IS_PACKAGE | IS_BYTECODE},
-     {"/__init__.pyo", IS_PACKAGE | IS_BYTECODE},
-     {"/__init__.py", IS_PACKAGE | IS_SOURCE},
      {".pyc", IS_BYTECODE},
-     {".pyo", IS_BYTECODE},
+-    {".pyo", IS_BYTECODE},
 -    {".py", IS_SOURCE},
 -    {"", 0}
 +    {".py", IS_SOURCE}
@@ -102,155 +84,83 @@ index f2cc245..b43d174 100644
  
  /* zipimporter object definition and support */
  
-@@ -44,6 +55,7 @@ struct _zipimporter {
-     PyObject *prefix;   /* file prefix: "a/sub/directory/",
-                            encoded to the filesystem encoding */
-     PyObject *files;    /* dict with file info {path: toc_entry} */
-+    Py_ssize_t start_offset, end_offset;
- };
- 
- static PyObject *ZipImportError;
-@@ -51,7 +63,7 @@ static PyObject *ZipImportError;
- static PyObject *zip_directory_cache = NULL;
- 
- /* forward decls */
--static PyObject *read_directory(PyObject *archive);
-+static PyObject *read_directory(PyObject *archive, Py_ssize_t start_offset, Py_ssize_t end_offset);
+@@ -55,6 +62,7 @@ static PyObject *read_directory(PyObject *archive);
  static PyObject *get_data(PyObject *archive, PyObject *toc_entry);
  static PyObject *get_module_code(ZipImporter *self, PyObject *fullname,
                                   int *p_ispackage, PyObject **p_modpath);
-@@ -67,17 +79,44 @@ static PyObject *get_module_code(ZipImporter *self, PyObject *fullname,
- static int
- zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
- {
--    PyObject *path, *files, *tmp;
-+    PyObject *arg, *path, *files, *tmp;
-     PyObject *filename = NULL;
-     Py_ssize_t len, flen;
++static time_t get_mtime_of_source(ZipImporter *self, PyObject *path);
  
-     if (!_PyArg_NoKeywords("zipimporter()", kwds))
-         return -1;
  
--    if (!PyArg_ParseTuple(args, "O&:zipimporter",
--                          PyUnicode_FSDecoder, &path))
-+    if (!PyArg_ParseTuple(args, "O:zipimporter", &arg))
-         return -1;
+ #define ZipImporter_Check(op) PyObject_TypeCheck(op, &ZipImporter_Type)
+@@ -233,7 +241,7 @@ make_filename(PyObject *prefix, PyObject *name)
+     Py_ssize_t len;
  
-+    if (!PyTuple_Check(arg)) {
-+        /* TODO: a bit lame */
-+        if (!PyArg_ParseTuple(args, "O&:zipimporter",
-+                              PyUnicode_FSDecoder, &path))
-+            return -1;
-+        self->start_offset = 0;
-+        self->end_offset = 0;
-+    } else {
-+        PyObject *i;
-+
-+        path = PyTuple_GetItem(arg, 0);
-+        if (!path)
-+            return -1;
-+        Py_INCREF(path);
-+
-+        i = PyTuple_GetItem(arg, 1);
-+        if (!i)
-+            return -1;
-+        self->start_offset = PyLong_AsLong(i);
-+        /* TODO: check for error? */
-+
-+        i = PyTuple_GetItem(arg, 2);
-+        if (!i)
-+            return -1;
-+        self->end_offset = PyLong_AsLong(i);
-+        /* TODO: check for error? */
-+    }
-+
-     if (PyUnicode_READY(path) == -1)
-         return -1;
- 
-@@ -110,6 +149,8 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
-             if (!S_ISREG(statbuf.st_mode))
-                 /* it's a not file */
-                 Py_CLEAR(filename);
-+            else if (self->end_offset == 0)
-+                self->end_offset = statbuf.st_size;
-             break;
-         }
-         Py_CLEAR(filename);
-@@ -131,7 +172,7 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
- 
-     files = PyDict_GetItem(zip_directory_cache, filename);
-     if (files == NULL) {
--        files = read_directory(filename);
-+        files = read_directory(filename, self->start_offset, self->end_offset);
-         if (files == NULL)
-             goto error;
-         if (PyDict_SetItem(zip_directory_cache, filename, files) != 0)
-@@ -289,20 +330,56 @@ check_is_directory(ZipImporter *self, PyObject* prefix, PyObject *path)
+     len = PyUnicode_GET_LENGTH(prefix) + PyUnicode_GET_LENGTH(name) + 1;
+-    p = buf = PyMem_New(Py_UCS4, len);
++    p = buf = PyMem_Malloc(sizeof(Py_UCS4) * len);
+     if (buf == NULL) {
+         PyErr_NoMemory();
+         return NULL;
+@@ -289,20 +297,50 @@ check_is_directory(ZipImporter *self, PyObject* prefix, PyObject *path)
      return res;
  }
  
 -/* Return some information about a module. */
- static enum zi_module_info
--get_module_info(ZipImporter *self, PyObject *fullname)
-+get_module_info_from_pycache(ZipImporter *self, PyObject *subname)
- {
--    PyObject *subname;
--    PyObject *path, *fullpath, *item;
--    struct st_zip_searchorder *zso;
++static PyObject *get_code_from_pycache(ZipImporter *self, PyObject *subname, time_t *mtime)
++{
 +    PyObject *path, *fullpath, *item, *prefix;
- 
--    subname = get_subname(fullname);
--    if (subname == NULL)
++
 +    prefix = PyUnicode_FromFormat("%U__pycache__%c", self->prefix, SEP);
 +    if (prefix == NULL)
-         return MI_ERROR;
- 
++        return NULL;
++
 +    path = make_filename(prefix, subname);
 +    Py_DECREF(prefix);
 +    if (path == NULL)
-+        return MI_ERROR;
++        return NULL;
 +
 +    fullpath = PyUnicode_FromFormat("%U.%s.pyc", path, _PySys_ImplCacheTag);
-+    if (fullpath == NULL) {
-+        Py_DECREF(path);
-+        return MI_ERROR;
-+    }
-+    item = PyDict_GetItem(self->files, fullpath);
-+    Py_DECREF(fullpath);
-+
-+    /* the order may be broken here, but pyo files are going away in
-+     * 3.5 anyway */
-+    if (item == NULL) {
-+        fullpath = PyUnicode_FromFormat("%U.%s.pyo", path, _PySys_ImplCacheTag);
-+        if (fullpath == NULL) {
-+            Py_DECREF(path);
-+            return MI_ERROR;
-+        }
-+        item = PyDict_GetItem(self->files, fullpath);
-+        Py_DECREF(fullpath);
-+    }
-+
-+    if (item != NULL) {
-+        Py_DECREF(path);
-+        return MI_MODULE;
-+    }
-+
 +    Py_DECREF(path);
-+    return MI_NOT_FOUND;
++    if (fullpath == NULL)
++        return NULL;
++
++    item = PyDict_GetItem(self->files, fullpath);
++    if (mtime)
++        *mtime = get_mtime_of_source(self, fullpath);
++    Py_DECREF(fullpath);
++    if (item == NULL)
++        return NULL;
++
++    return item;
++}
++
+ static enum zi_module_info
+-get_module_info(ZipImporter *self, PyObject *fullname)
++get_module_info_from_pycache(ZipImporter *self, PyObject *subname)
++{
++    PyObject *item;
++
++    item = get_code_from_pycache(self, subname, NULL);
++    return item != NULL ? MI_MODULE : MI_NOT_FOUND;
 +}
 +
 +static enum zi_module_info
 +get_module_info_legacy(ZipImporter *self, PyObject *subname)
-+{
-+    PyObject *path, *fullpath, *item;
-+    struct st_zip_searchorder *zso;
-+
+ {
+-    PyObject *subname;
+     PyObject *path, *fullpath, *item;
+     struct st_zip_searchorder *zso;
+ 
+-    subname = get_subname(fullname);
+-    if (subname == NULL)
+-        return MI_ERROR;
+-
      path = make_filename(self->prefix, subname);
 -    Py_DECREF(subname);
      if (path == NULL)
          return MI_ERROR;
  
-@@ -312,6 +389,7 @@ get_module_info(ZipImporter *self, PyObject *fullname)
+@@ -312,6 +350,7 @@ get_module_info(ZipImporter *self, PyObject *fullname)
              Py_DECREF(path);
              return MI_ERROR;
          }
@@ -258,7 +168,7 @@ index f2cc245..b43d174 100644
          item = PyDict_GetItem(self->files, fullpath);
          Py_DECREF(fullpath);
          if (item != NULL) {
-@@ -322,10 +400,30 @@ get_module_info(ZipImporter *self, PyObject *fullname)
+@@ -322,10 +361,30 @@ get_module_info(ZipImporter *self, PyObject *fullname)
                  return MI_MODULE;
          }
      }
@@ -289,7 +199,7 @@ index f2cc245..b43d174 100644
  typedef enum {
      FL_ERROR,
      FL_NOT_FOUND,
-@@ -440,6 +538,91 @@ zipimporter_find_loader(PyObject *obj, PyObject *args)
+@@ -440,6 +499,91 @@ zipimporter_find_loader(PyObject *obj, PyObject *args)
      return result;
  }
  
@@ -381,7 +291,7 @@ index f2cc245..b43d174 100644
  /* Load and return the module named by 'fullname'. */
  static PyObject *
  zipimporter_load_module(PyObject *obj, PyObject *args)
-@@ -456,6 +639,14 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
+@@ -456,6 +600,14 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
      if (PyUnicode_READY(fullname) == -1)
          return NULL;
  
@@ -396,25 +306,43 @@ index f2cc245..b43d174 100644
      code = get_module_code(self, fullname, &ispackage, &modpath);
      if (code == NULL)
          goto error;
-@@ -854,7 +1045,7 @@ get_long(unsigned char *buf) {
-    data_size and file_offset are 0.
- */
- static PyObject *
--read_directory(PyObject *archive)
-+read_directory(PyObject *archive, Py_ssize_t start_offset, Py_ssize_t end_offset)
- {
-     PyObject *files = NULL;
-     FILE *fp;
-@@ -880,7 +1071,7 @@ read_directory(PyObject *archive)
-         return NULL;
-     }
+@@ -1378,11 +1530,27 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+     PyObject *code = NULL, *toc_entry, *subname;
+     PyObject *path, *fullpath = NULL;
+     struct st_zip_searchorder *zso;
++    time_t mtime = 0;
  
--    if (fseek(fp, -22, SEEK_END) == -1) {
-+    if (fseek(fp, end_offset - 22, SEEK_SET) == -1) {
-         fclose(fp);
-         PyErr_Format(ZipImportError, "can't read Zip file: %R", archive);
+     subname = get_subname(fullname);
+     if (subname == NULL)
          return NULL;
-@@ -1413,6 +1604,17 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+ 
++    toc_entry = get_code_from_pycache(self, subname, &mtime);
++    if (toc_entry != NULL) {
++        code = get_code_from_data(self, 0, 1, mtime, toc_entry);
++        if (code != Py_None) {
++            if (code != NULL && p_modpath != NULL) {
++                *p_modpath = PyTuple_GetItem(toc_entry, 0);
++                Py_INCREF(*p_modpath);
++            }
++            *p_ispackage = 0;
++            Py_DECREF(subname);
++            return code;
++        }
++        Py_DECREF(code);
++    }
++
+     path = make_filename(self->prefix, subname);
+     Py_DECREF(subname);
+     if (path == NULL)
+@@ -1400,7 +1568,6 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+                                self->archive, (int)SEP, fullpath);
+         toc_entry = PyDict_GetItem(self->files, fullpath);
+         if (toc_entry != NULL) {
+-            time_t mtime = 0;
+             int ispackage = zso->type & IS_PACKAGE;
+             int isbytecode = zso->type & IS_BYTECODE;
+ 
+@@ -1413,6 +1580,17 @@ get_module_code(ZipImporter *self, PyObject *fullname,
              Py_CLEAR(fullpath);
              if (p_ispackage != NULL)
                  *p_ispackage = ispackage;
@@ -432,23 +360,18 @@ index f2cc245..b43d174 100644
              code = get_code_from_data(self, ispackage,
                                        isbytecode, mtime,
                                        toc_entry);
-@@ -1467,29 +1669,80 @@ static struct PyModuleDef zipimportmodule = {
+@@ -1467,6 +1645,54 @@ static struct PyModuleDef zipimportmodule = {
      NULL
  };
  
--PyMODINIT_FUNC
--PyInit_zipimport(void)
 +static Py_ssize_t get_dynload_file_tab_len(void)
- {
--    PyObject *mod;
++{
 +    int i = 0;
 +    while (_PyImport_DynLoadFiletab[i])
 +        i++;
 +    return i;
 +}
- 
--    if (PyType_Ready(&ZipImporter_Type) < 0)
--        return NULL;
++
 +static int init_search_order(void)
 +{
 +    struct st_zip_searchorder *zso;
@@ -459,41 +382,17 @@ index f2cc245..b43d174 100644
 +             "%c__pycache__%c__init__.%s.pyc", SEP, SEP, _PySys_ImplCacheTag);
 +    snprintf(zip_searchorder_base[1].suffix, sizeof(zip_searchorder_base[1].suffix),
 +             "%c__pycache__%c__init__.%s.pyo", SEP, SEP, _PySys_ImplCacheTag);
- 
-     /* Correct directory separator */
--    zip_searchorder[0].suffix[0] = SEP;
--    zip_searchorder[1].suffix[0] = SEP;
--    zip_searchorder[2].suffix[0] = SEP;
++
++    /* Correct directory separator */
 +    zip_searchorder_base[2].suffix[0] = SEP;
-+    zip_searchorder_base[3].suffix[0] = SEP;
-+    zip_searchorder_base[4].suffix[0] = SEP;
-     if (Py_OptimizeFlag) {
-         /* Reverse *.pyc and *.pyo */
-         struct st_zip_searchorder tmp;
--        tmp = zip_searchorder[0];
--        zip_searchorder[0] = zip_searchorder[1];
--        zip_searchorder[1] = tmp;
--        tmp = zip_searchorder[3];
--        zip_searchorder[3] = zip_searchorder[4];
--        zip_searchorder[4] = tmp;
-+        tmp = zip_searchorder_base[0];
-+        zip_searchorder_base[0] = zip_searchorder_base[1];
-+        zip_searchorder_base[1] = tmp;
-+        tmp = zip_searchorder_base[2];
-+        zip_searchorder_base[2] = zip_searchorder_base[3];
-+        zip_searchorder_base[3] = tmp;
-+        tmp = zip_searchorder_base[5];
-+        zip_searchorder_base[5] = zip_searchorder_base[6];
-+        zip_searchorder_base[6] = tmp;
-+    }
 +
 +    zip_searchorder = PyMem_Malloc(sizeof(struct st_zip_searchorder) *
 +                                   (zip_searchorder_base_len + get_dynload_file_tab_len() + 1));
 +    if (zip_searchorder == NULL) {
 +        PyErr_SetString(PyExc_MemoryError, "zipimport: out of memory");
 +        return -1;
-     }
- 
++    }
++
 +    for (i = 0, zso = zip_searchorder_base; i < zip_searchorder_base_len; zso++, i++)
 +        zip_searchorder[i] = *zso;
 +
@@ -513,17 +412,29 @@ index f2cc245..b43d174 100644
 +    return 0;
 +}
 +
-+PyMODINIT_FUNC
-+PyInit_zipimport(void)
-+{
-+    PyObject *mod;
-+
-+    if (PyType_Ready(&ZipImporter_Type) < 0)
-+        return NULL;
-+
+ PyMODINIT_FUNC
+ PyInit_zipimport(void)
+ {
+@@ -1475,20 +1701,8 @@ PyInit_zipimport(void)
+     if (PyType_Ready(&ZipImporter_Type) < 0)
+         return NULL;
+ 
+-    /* Correct directory separator */
+-    zip_searchorder[0].suffix[0] = SEP;
+-    zip_searchorder[1].suffix[0] = SEP;
+-    zip_searchorder[2].suffix[0] = SEP;
+-    if (Py_OptimizeFlag) {
+-        /* Reverse *.pyc and *.pyo */
+-        struct st_zip_searchorder tmp;
+-        tmp = zip_searchorder[0];
+-        zip_searchorder[0] = zip_searchorder[1];
+-        zip_searchorder[1] = tmp;
+-        tmp = zip_searchorder[3];
+-        zip_searchorder[3] = zip_searchorder[4];
+-        zip_searchorder[4] = tmp;
+-    }
 +    if (init_search_order() < 0)
 +        return NULL;
-+
+ 
      mod = PyModule_Create(&zipimportmodule);
      if (mod == NULL)
-         return NULL;

@@ -1,13 +1,27 @@
+import sys
 import subprocess
 import shutil
 import tarfile
 import pkgutil
+import argparse
 from pathlib import Path
 from urllib.request import urlopen
 
 
+PYTHON_VERSION_MAP = {
+    '3.4': {
+        'full_version': '3.4.3',
+        'patch': Path('patches/python34.diff'),
+        'unicode': 'ucs4',
+    },
+    '2.7': {
+        'full_version': '2.7.11',
+        'patch': Path('patches/python27.diff'),
+        'unicode': 'ucs2',
+    },
+}
+
 PYRUN_VERSION = '2.1.1'
-PYTHON_FULL_VERSION = '3.4.3'
 SETUPTOOLS_VERSION = '18.4'
 PIP_VERSION = '7.1.2'
 PYRUN_SRC_URL = 'https://downloads.egenix.com/python/egenix-pyrun-{}.tar.gz'.format(PYRUN_VERSION)
@@ -47,14 +61,16 @@ def patch(dst_path, diff):
 
 
 class Bootstrap:
-    def __init__(self, python_full_version):
-        self.python_full_version = python_full_version
-        self.python_major_version = self.python_full_version.rsplit('.', 1)[0]
+    def __init__(self, python_version):
+        self.python_major_version = python_version
+        self.meta = PYTHON_VERSION_MAP[python_version]
+        self.python_full_version = self.meta['full_version']
         builddir = Path(BUILD_DIR)
         ensure_dir_exists(builddir)
         self.builddir = builddir.resolve()
+        self.targetdir = self.builddir / 'target-{}'.format(self.python_major_version)
         self.pyrun_dir = self.builddir / PYRUN_SRC_DIR / 'PyRun'
-        self.pyrun = self.builddir / 'bin' / 'pyrun{}'.format(self.python_major_version)
+        self.pyrun = self.targetdir / 'bin' / 'pyrun{}'.format(self.python_major_version)
 
     def pyrun_make(self, target):
         # pyrun seems to compile incorrectly, if compiled with -jN
@@ -81,10 +97,12 @@ class Bootstrap:
         patch(self.builddir / PYRUN_SRC_DIR, pyrun_diff)
         # giving full python source path as makefile target makes pyrun
         # download and patch python
-        python_dir = self.pyrun_dir / 'Python-{}-ucs4'.format(self.python_full_version)
+        python_dir = self.pyrun_dir / 'Python-{}-{}'.format(self.python_full_version,
+                                                              self.meta['unicode'])
         self.pyrun_make(str(python_dir))
         # apply our python patches too
-        python_diff = pkgutil.get_data(__package__, 'patches/python34.diff')
+        py_patch_path = PYTHON_VERSION_MAP[self.python_major_version]['patch']
+        python_diff = pkgutil.get_data(__package__, str(py_patch_path))
         patch(python_dir, python_diff)
         # configure ffi (for ctypes)
         ffi_config_script = python_dir / 'Modules' / '_ctypes' / 'libffi' / 'configure'
@@ -95,14 +113,15 @@ class Bootstrap:
         subprocess.check_call([str(ffi_config_script)], cwd=str(ffi_build_dir))
         # build pyrun and move it to top build directory
         self.pyrun_make('pyrun')
-        pyrun_target_dir = self.pyrun_dir / 'build-{}-ucs4'.format(self.python_major_version)
+        pyrun_target_dir = self.pyrun_dir / 'build-{}-{}'.format(self.python_major_version,
+                                                                 self.meta['unicode'])
         pyrun_bin = (pyrun_target_dir / 'bin' / self.pyrun.name)
-        ensure_dir_exists(self.builddir / 'bin')
-        ensure_dir_exists(self.builddir / 'lib' /
+        ensure_dir_exists(self.targetdir / 'bin')
+        ensure_dir_exists(self.targetdir / 'lib' /
                           'python{}'.format(self.python_major_version) /
                           'site-packages')
         pyrun_bin.rename(self.pyrun)
-        (pyrun_target_dir / 'include').rename(self.builddir / 'include')
+        (pyrun_target_dir / 'include').rename(self.targetdir / 'include')
 
     def bootstrap(self):
         self.install_pyrun()
@@ -111,8 +130,19 @@ class Bootstrap:
 
 
 def main():
-    b = Bootstrap(PYTHON_FULL_VERSION)
-    b.bootstrap()
+    parser = argparse.ArgumentParser(description='exxo bootstrap', prog='exxo')
+    parser.add_argument('major_version', nargs='+',
+                        help='python major version to bootstrap (or "all")')
+    args = parser.parse_args()
+    versions = args.major_version
+    if 'all' in versions:
+        versions = PYTHON_VERSION_MAP.keys()
+    for version in versions:
+        if version not in PYTHON_VERSION_MAP:
+            sys.exit('unsupported python version: {}'.format(version))
+    for version in versions:
+        b = Bootstrap(version)
+        b.bootstrap()
 
 
 if __name__ == '__main__':

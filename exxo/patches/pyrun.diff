@@ -204,84 +204,39 @@ index a52124c..08f1318 100755
      # default prefix and exec_prefix
      if not exec_prefix:
 diff --git a/PyRun/Runtime/pyrun_template.py b/PyRun/Runtime/pyrun_template.py
-index 983a6ca..e03c0a8 100644
+index 983a6ca..8cad76e 100644
 --- a/PyRun/Runtime/pyrun_template.py
 +++ b/PyRun/Runtime/pyrun_template.py
-@@ -58,6 +58,7 @@ from pyrun_config import (
-     pyrun_prefix,
-     pyrun_bindir,
-     )
-+import struct
+@@ -44,6 +44,7 @@ COPYRIGHT = """\
+ ### Imports
  
- ### Globals
- 
-@@ -82,6 +83,8 @@ pyrun_hashrandomization = False
- PY2 = (sys.version_info[0] == 2)
- PY3 = (sys.version_info[0] == 3)
- 
-+zip_packer = struct.Struct('IQ')
-+
- if PY2:
-     # Emulate Python 3 exec() function
-     def run_code(code, globals_dict, locals_dict=None):
-@@ -725,6 +728,14 @@ def pyrun_execute_script(pyrun_script, mode='file'):
-     else:
-         raise TypeError('unknown execution mode %r' % mode)
- 
-+
-+def try_read_zip_index():
-+    with open(sys.executable, 'rb') as fp:
-+        fp.seek(-zip_packer.size, os.SEEK_END)
-+        magic, pos = zip_packer.unpack(fp.read())
-+    return (None if magic != 0xdeadbeef else pos)
-+
-+
- ### Entry point
- 
- if __name__ == '__main__':
-@@ -743,8 +754,10 @@ if __name__ == '__main__':
+ import sys, os
++import zipfile
+ import pyrun_config
+ from pyrun_config import (
+     pyrun_name,
+@@ -743,8 +744,10 @@ if __name__ == '__main__':
      if pyrun_debug > 1:
          pyrun_info()
  
-+    pyrun_zipindex = try_read_zip_index()
++    running_from_zip = zipfile.is_zipfile(sys.executable)
 +
      # Start the runtime
 -    if not sys.argv and sys.stdin.isatty():
-+    if not sys.argv and sys.stdin.isatty() and not pyrun_zipindex:
++    if not sys.argv and sys.stdin.isatty() and not running_from_zip:
  
          ### Enter interactive mode
  
-@@ -768,7 +781,11 @@ if __name__ == '__main__':
+@@ -767,8 +770,11 @@ if __name__ == '__main__':
+ 
          ### Run a script
  
++        if running_from_zip:
++            pyrun_script = sys.executable
++            sys.argv.insert(0, sys.executable)
          # Setup script to run
 -        if not sys.argv:
-+        if pyrun_zipindex:
-+            exe_size = os.path.getsize(sys.executable)
-+            pyrun_script = (sys.executable, pyrun_zipindex, exe_size - zip_packer.size)
-+            sys.argv.insert(0, sys.executable)
 +        elif not sys.argv:
              # Filter mode: read the script from stdin
              if pyrun_as_string or pyrun_as_module:
                  # Missing script argument
-@@ -792,6 +809,8 @@ if __name__ == '__main__':
- 
-         # Setup paths & mode
-         script_path = pyrun_script
-+        if isinstance(script_path, tuple):
-+            script_path = script_path[0]
-         if pyrun_as_module:
-             mode = 'module'
-             script_path = None
-@@ -802,8 +821,9 @@ if __name__ == '__main__':
-             if pyrun_version < '2.7.0':
-                 mode = 'file'
-             # Python 2.7 and later
--            elif (pyrun_script.endswith('.py') or
--                  pyrun_script.endswith('.pyw')):
-+            elif (hasattr(pyrun_script, 'endswith') and
-+                  (pyrun_script.endswith('.py') or
-+                   pyrun_script.endswith('.pyw'))):
-                 mode = 'file'
-             else:
-                 # Use path mode for all other files, since this

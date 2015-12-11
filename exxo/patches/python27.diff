@@ -19,7 +19,7 @@ index 8862c36..2afec2d 100755
  			esac
  			obj="$srcdir/$obj"
 diff --git a/Modules/zipimport.c b/Modules/zipimport.c
-index 7240cb4..edc8a3b 100644
+index 7240cb4..8ad589d 100644
 --- a/Modules/zipimport.c
 +++ b/Modules/zipimport.c
 @@ -2,15 +2,18 @@
@@ -66,95 +66,17 @@ index 7240cb4..edc8a3b 100644
  
  /* zipimporter object definition and support */
  
-@@ -38,13 +46,14 @@ struct _zipimporter {
-     PyObject *archive;  /* pathname of the Zip archive */
-     PyObject *prefix;   /* file prefix: "a/sub/directory/" */
-     PyObject *files;    /* dict with file info {path: toc_entry} */
-+    Py_ssize_t start_offset, end_offset;
- };
- 
- static PyObject *ZipImportError;
- static PyObject *zip_directory_cache = NULL;
- 
- /* forward decls */
--static PyObject *read_directory(char *archive);
-+static PyObject *read_directory(char *archive, Py_ssize_t start_offset, Py_ssize_t end_offset);
- static PyObject *get_data(char *archive, PyObject *toc_entry);
- static PyObject *get_module_code(ZipImporter *self, char *fullname,
-                                  int *p_ispackage, char **p_modpath);
-@@ -60,16 +69,46 @@ static PyObject *get_module_code(ZipImporter *self, char *fullname,
- static int
- zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
- {
-+    PyObject *arg;
+@@ -63,9 +71,6 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
      char *path, *p, *prefix, buf[MAXPATHLEN+2];
      size_t len;
  
-     if (!_PyArg_NoKeywords("zipimporter()", kwds))
+-    if (!_PyArg_NoKeywords("zipimporter()", kwds))
+-        return -1;
+-
+     if (!PyArg_ParseTuple(args, "s:zipimporter",
+                           &path))
          return -1;
- 
--    if (!PyArg_ParseTuple(args, "s:zipimporter",
--                          &path))
-+    if (!PyArg_ParseTuple(args, "O:zipimporter",
-+                          &arg))
-         return -1;
- 
-+    if (!PyTuple_Check(arg)) {
-+        /* TODO: a bit lame */
-+        if (!PyArg_ParseTuple(args, "s:zipimporter",
-+                              &path))
-+            return -1;
-+        self->start_offset = 0;
-+        self->end_offset = 0;
-+    } else {
-+        PyObject *pathobj;
-+        PyObject *i;
-+
-+        pathobj = PyTuple_GetItem(arg, 0);
-+        if (!pathobj)
-+            return -1;
-+        path = PyString_AsString(pathobj);
-+
-+        i = PyTuple_GetItem(arg, 1);
-+        if (!i)
-+            return -1;
-+        self->start_offset = PyLong_AsLong(i);
-+        /* TODO: check for error? */
-+
-+        i = PyTuple_GetItem(arg, 2);
-+        if (!i)
-+            return -1;
-+        self->end_offset = PyLong_AsLong(i);
-+        /* TODO: check for error? */
-+    }
-+
-     len = strlen(path);
-     if (len == 0) {
-         PyErr_SetString(ZipImportError, "archive path is empty");
-@@ -99,9 +138,12 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
-         rv = stat(buf, &statbuf);
-         if (rv == 0) {
-             /* it exists */
--            if (S_ISREG(statbuf.st_mode))
-+            if (S_ISREG(statbuf.st_mode)) {
-                 /* it's a file */
-                 path = buf;
-+                if (self->end_offset == 0)
-+                    self->end_offset = statbuf.st_size;
-+            }
-             break;
-         }
- #else
-@@ -126,7 +168,7 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
-         PyObject *files;
-         files = PyDict_GetItemString(zip_directory_cache, path);
-         if (files == NULL) {
--            files = read_directory(buf);
-+            files = read_directory(buf, self->start_offset, self->end_offset);
-             if (files == NULL)
-                 return -1;
-             if (PyDict_SetItemString(zip_directory_cache, path,
-@@ -304,6 +346,85 @@ zipimporter_find_module(PyObject *obj, PyObject *args)
+@@ -304,6 +309,85 @@ zipimporter_find_module(PyObject *obj, PyObject *args)
      return (PyObject *)self;
  }
  
@@ -240,7 +162,7 @@ index 7240cb4..edc8a3b 100644
  /* Load and return the module named by 'fullname'. */
  static PyObject *
  zipimporter_load_module(PyObject *obj, PyObject *args)
-@@ -317,6 +438,14 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
+@@ -317,6 +401,14 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
                            &fullname))
          return NULL;
  
@@ -255,25 +177,7 @@ index 7240cb4..edc8a3b 100644
      code = get_module_code(self, fullname, &ispackage, &modpath);
      if (code == NULL)
          return NULL;
-@@ -683,7 +812,7 @@ get_long(unsigned char *buf) {
-    data_size and file_offset are 0.
- */
- static PyObject *
--read_directory(char *archive)
-+read_directory(char *archive, Py_ssize_t start_offset, Py_ssize_t end_offset)
- {
-     PyObject *files = NULL;
-     FILE *fp;
-@@ -710,7 +839,7 @@ read_directory(char *archive)
-         return NULL;
-     }
- 
--    if (fseek(fp, -22, SEEK_END) == -1) {
-+    if (fseek(fp, end_offset - 22, SEEK_SET) == -1) {
-         fclose(fp);
-         PyErr_Format(ZipImportError, "can't read Zip file: %s", archive);
-         return NULL;
-@@ -1168,6 +1297,16 @@ get_module_code(ZipImporter *self, char *fullname,
+@@ -1168,6 +1260,16 @@ get_module_code(ZipImporter *self, char *fullname,
                  mtime = get_mtime_of_source(self, path);
              if (p_ispackage != NULL)
                  *p_ispackage = ispackage;
@@ -290,7 +194,7 @@ index 7240cb4..edc8a3b 100644
              code = get_code_from_data(self, ispackage,
                                        isbytecode, mtime,
                                        toc_entry);
-@@ -1187,6 +1326,60 @@ get_module_code(ZipImporter *self, char *fullname,
+@@ -1187,6 +1289,60 @@ get_module_code(ZipImporter *self, char *fullname,
      return NULL;
  }
  
@@ -351,7 +255,7 @@ index 7240cb4..edc8a3b 100644
  
  /* Module init */
  
-@@ -1212,6 +1405,9 @@ initzipimport(void)
+@@ -1212,6 +1368,9 @@ initzipimport(void)
      if (PyType_Ready(&ZipImporter_Type) < 0)
          return;
  
