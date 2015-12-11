@@ -19,7 +19,7 @@ index 8862c36..2afec2d 100755
  			esac
  			obj="$srcdir/$obj"
 diff --git a/Modules/zipimport.c b/Modules/zipimport.c
-index 7240cb4..8ad589d 100644
+index 7240cb4..96e8cc6 100644
 --- a/Modules/zipimport.c
 +++ b/Modules/zipimport.c
 @@ -2,15 +2,18 @@
@@ -112,7 +112,7 @@ index 7240cb4..8ad589d 100644
 +
 +exit:
 +    close(tmp);
-+    /* unlink(tmpbuf); */
++    unlink(tmpbuf);
 +    return mod;
 +}
 +
