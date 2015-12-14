@@ -1,7 +1,10 @@
-diff --git a/PyRun/Runtime/Setup.PyRun-2.7 b/PyRun/Runtime/Setup.PyRun-2.7
-index ad9ed96..9f2ec14 100644
+diff --git a/PyRun/Runtime/Setup.PyRun-2.7 b/PyRun/Runtime/Setup.PyRun-2.7.tmpl
+similarity index 92%
+rename from PyRun/Runtime/Setup.PyRun-2.7
+rename to PyRun/Runtime/Setup.PyRun-2.7.tmpl
+index ad9ed96..855f7d7 100644
 --- a/PyRun/Runtime/Setup.PyRun-2.7
-+++ b/PyRun/Runtime/Setup.PyRun-2.7
++++ b/PyRun/Runtime/Setup.PyRun-2.7.tmpl
 @@ -242,7 +242,7 @@ _socket socketmodule.c
  SSL=/usr
  _ssl _ssl.c \
@@ -82,14 +85,17 @@ index ad9ed96..9f2ec14 100644
 +
 +# _curses _cursesmodule.c -Wl,-Bstatic -lcurses -ltermcap -Wl,-Bdynamic
 +# _curses_panel _curses_panel.c -Wl,-Bstatic -lpanel -lncurses -Wl,-Bdynamic
-+_curses _cursesmodule.c -Wl,-lcurses -Bstatic -ltermcap -Wl,-Bdynamic
-+_curses_panel _curses_panel.c -lncurses -Wl,-Bstatic -lpanel -Wl,-Bdynamic
++_curses _cursesmodule.c -I{{ ncurses_dir }}/include {{ ncurses_dir }}/lib/libncurses.a -Wl,-Bstatic -ltermcap -Wl,-Bdynamic
++_curses_panel _curses_panel.c -I{{ ncurses_dir }}/include {{ ncurses_dir }}/lib/libpanel.a {{ ncurses_dir }}/lib/libncurses.a -Wl,-Bstatic -ltermcap -Wl,-Bdynamic
 +
 +parser parsermodule.c
-diff --git a/PyRun/Runtime/Setup.PyRun-3.4 b/PyRun/Runtime/Setup.PyRun-3.4
-index 47629a2..5f32215 100644
+diff --git a/PyRun/Runtime/Setup.PyRun-3.4 b/PyRun/Runtime/Setup.PyRun-3.4.tmpl
+similarity index 88%
+rename from PyRun/Runtime/Setup.PyRun-3.4
+rename to PyRun/Runtime/Setup.PyRun-3.4.tmpl
+index 47629a2..cba3306 100644
 --- a/PyRun/Runtime/Setup.PyRun-3.4
-+++ b/PyRun/Runtime/Setup.PyRun-3.4
++++ b/PyRun/Runtime/Setup.PyRun-3.4.tmpl
 @@ -208,7 +208,7 @@ _socket socketmodule.c
  SSL=/usr
  _ssl _ssl.c \
@@ -149,7 +155,7 @@ index 47629a2..5f32215 100644
 +	_ctypes/libffi/src/x86/sysv.S \
 +	-I$(srcdir)/Modules/_ctypes/libffi/src \
 +	-I$(srcdir)/Modules/_ctypes/libffi/include \
-+	-I$(srcdir)/build/temp.linux-x86_64-3.4/libffi
++	-I$(srcdir)/build/temp.linux-{{ arch }}-3.4/libffi
 +
 +spwd spwdmodule.c
 +
@@ -165,8 +171,8 @@ index 47629a2..5f32215 100644
 +
 +# _curses _cursesmodule.c -Wl,-Bstatic -lcurses -ltermcap -Wl,-Bdynamic
 +# _curses_panel _curses_panel.c -Wl,-Bstatic -lpanel -lncurses -Wl,-Bdynamic
-+_curses _cursesmodule.c -Wl,-lcurses -Bstatic -ltermcap -Wl,-Bdynamic
-+_curses_panel _curses_panel.c -lncurses -Wl,-Bstatic -lpanel -Wl,-Bdynamic
++_curses _cursesmodule.c -I{{ ncurses_dir }}/include {{ ncurses_dir }}/lib/libncurses.a -Wl,-Bstatic -ltermcap -Wl,-Bdynamic
++_curses_panel _curses_panel.c -I{{ ncurses_dir }}/include {{ ncurses_dir }}/lib/libpanel.a {{ ncurses_dir }}/lib/libncurses.a -Wl,-Bstatic -ltermcap -Wl,-Bdynamic
 +
 +DECIMAL_DEFS=-DCONFIG_64=1 -DASM=1
 +_decimal \

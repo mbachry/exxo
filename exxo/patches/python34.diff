@@ -35,7 +35,7 @@ index 8b5cc28..8666e5c 100755
  			esac
  			obj="$srcdir/$obj"
 diff --git a/Modules/zipimport.c b/Modules/zipimport.c
-index f2cc245..9e61a86 100644
+index f2cc245..ba81260 100644
 --- a/Modules/zipimport.c
 +++ b/Modules/zipimport.c
 @@ -3,14 +3,16 @@
@@ -92,15 +92,6 @@ index f2cc245..9e61a86 100644
  
  
  #define ZipImporter_Check(op) PyObject_TypeCheck(op, &ZipImporter_Type)
-@@ -233,7 +241,7 @@ make_filename(PyObject *prefix, PyObject *name)
-     Py_ssize_t len;
- 
-     len = PyUnicode_GET_LENGTH(prefix) + PyUnicode_GET_LENGTH(name) + 1;
--    p = buf = PyMem_New(Py_UCS4, len);
-+    p = buf = PyMem_Malloc(sizeof(Py_UCS4) * len);
-     if (buf == NULL) {
-         PyErr_NoMemory();
-         return NULL;
 @@ -289,20 +297,50 @@ check_is_directory(ZipImporter *self, PyObject* prefix, PyObject *path)
      return res;
  }

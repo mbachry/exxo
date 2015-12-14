@@ -1,3 +1,4 @@
+import os
 import sys
 import subprocess
 import shutil
@@ -6,6 +7,7 @@ import pkgutil
 import argparse
 from pathlib import Path
 from urllib.request import urlopen
+import jinja2
 
 
 PYTHON_VERSION_MAP = {
@@ -24,11 +26,38 @@ PYTHON_VERSION_MAP = {
 PYRUN_VERSION = '2.1.1'
 SETUPTOOLS_VERSION = '18.4'
 PIP_VERSION = '7.1.2'
+NCURSES_VERSION = '5.9+20150516'
 PYRUN_SRC_URL = 'https://downloads.egenix.com/python/egenix-pyrun-{}.tar.gz'.format(PYRUN_VERSION)
 PYRUN_SRC_DIR = 'egenix-pyrun-{}'.format(PYRUN_VERSION)
 SETUPTOOLS_URL = 'https://pypi.python.org/packages/source/s/setuptools/setuptools-{}.tar.gz'.format(SETUPTOOLS_VERSION)
 PIP_URL = 'https://pypi.python.org/packages/source/p/pip/pip-{}.tar.gz'.format(PIP_VERSION)
+NCURSES_URL = 'https://launchpad.net/ubuntu/+archive/primary/+files/ncurses_{}.orig.tar.gz'.format(NCURSES_VERSION)
 BUILD_DIR = 'build'
+
+NCURSES_CONFIGURE_ARGS = [
+    '--prefix=/usr',
+    '--without-shared',
+    '--without-profile',
+    '--without-debug',
+    '--disable-rpath',
+    '--enable-echo',
+    '--enable-const',
+    '--without-ada',
+    '--without-tests',
+    '--without-progs',
+    '--without-sysmouse',
+    '--without-gpm',
+    '--enable-symlinks',
+    '--disable-lp64',
+    '--with-chtype=long',
+    '--with-mmask-t=long',
+    '--disable-termcap',
+    '--with-default-terminfo-dir=/etc/terminfo',
+    '--with-terminfo-dirs=/etc/terminfo:/lib/terminfo:/usr/share/terminfo',
+    '--with-ticlib=tic',
+    '--with-termlib=tinfo',
+    '--with-xterm-kbs=del',
+]
 
 
 def ensure_dir_exists(d):
@@ -71,12 +100,24 @@ class Bootstrap:
         self.targetdir = self.builddir / 'target-{}'.format(self.python_major_version)
         self.pyrun_dir = self.builddir / PYRUN_SRC_DIR / 'PyRun'
         self.pyrun = self.targetdir / 'bin' / 'pyrun{}'.format(self.python_major_version)
+        self.arch = os.uname().machine
+        self.ncurses_dir = self.builddir / 'ncurses'
 
     def pyrun_make(self, target):
         # pyrun seems to compile incorrectly, if compiled with -jN
         # larger than 1
         subprocess.check_call(['make', '-j1', target, 'PYTHONFULLVERSION=' + self.python_full_version],
                               cwd=str(self.pyrun_dir))
+
+    def install_ncurses(self):
+        download_and_unpack(NCURSES_URL, self.builddir / 'ncurses.tar.gz', self.builddir)
+        srcdir = self.builddir / 'ncurses-{}'.format(NCURSES_VERSION.replace('+', '-'))
+        ensure_dir_exists(self.ncurses_dir)
+        subprocess.check_call([str(srcdir / 'configure')] + NCURSES_CONFIGURE_ARGS,
+                              cwd=str(srcdir))
+        subprocess.check_call(['make'], cwd=str(srcdir))
+        shutil.move(str(srcdir / 'lib'), str(self.ncurses_dir))
+        shutil.move(str(srcdir / 'include'), str(self.ncurses_dir))
 
     def install_setuptools(self):
         download_and_unpack(SETUPTOOLS_URL, self.builddir / 'setuptools.tar.gz', self.builddir)
@@ -88,6 +129,18 @@ class Bootstrap:
         pip_src_dir = self.builddir / 'pip-{}'.format(PIP_VERSION)
         setup_py = pip_src_dir / 'setup.py'
         subprocess.check_call([str(self.pyrun), str(setup_py), 'install'], cwd=str(pip_src_dir))
+
+    def render_setup_file(self):
+        fn = 'Setup.PyRun-{}'.format(self.python_major_version)
+        tmpl = self.pyrun_dir / 'Runtime' / (fn + '.tmpl')
+        with tmpl.open() as fp:
+            t = jinja2.Template(fp.read())
+        buf = t.render(
+            arch=self.arch,
+            ncurses_dir=self.ncurses_dir)
+        setup = self.pyrun_dir / 'Runtime' / fn
+        with setup.open('w') as fp:
+            print(buf, file=fp)
 
     def install_pyrun(self):
         # download, unpack and patch pyrun
@@ -107,10 +160,11 @@ class Bootstrap:
         # configure ffi (for ctypes)
         ffi_config_script = python_dir / 'Modules' / '_ctypes' / 'libffi' / 'configure'
         ffi_build_dir = (python_dir / 'build' /
-                         'temp.linux-x86_64-{}'.format(self.python_major_version) /
+                         'temp.linux-{}-{}'.format(self.arch, self.python_major_version) /
                          'libffi')
         ensure_dir_exists(ffi_build_dir)
         subprocess.check_call([str(ffi_config_script)], cwd=str(ffi_build_dir))
+        self.render_setup_file()
         # build pyrun and move it to top build directory
         self.pyrun_make('pyrun')
         pyrun_target_dir = self.pyrun_dir / 'build-{}-{}'.format(self.python_major_version,
@@ -124,6 +178,7 @@ class Bootstrap:
         (pyrun_target_dir / 'include').rename(self.targetdir / 'include')
 
     def bootstrap(self):
+        self.install_ncurses()
         self.install_pyrun()
         self.install_setuptools()
         self.install_pip()
