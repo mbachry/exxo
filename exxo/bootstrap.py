@@ -127,6 +127,8 @@ class Bootstrap:
     def install_pip(self):
         download_and_unpack(PIP_URL, self.builddir / 'pip.tar.gz', self.builddir)
         pip_src_dir = self.builddir / 'pip-{}'.format(PIP_VERSION)
+        pip_diff = pkgutil.get_data(__package__, 'patches/pip.diff')
+        patch(pip_src_dir, pip_diff)
         setup_py = pip_src_dir / 'setup.py'
         subprocess.check_call([str(self.pyrun), str(setup_py), 'install'], cwd=str(pip_src_dir))
 

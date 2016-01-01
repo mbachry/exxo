@@ -1,0 +1,79 @@
+diff --git a/pip/commands/install.py b/pip/commands/install.py
+index dbcf100..5e7c138 100644
+--- a/pip/commands/install.py
++++ b/pip/commands/install.py
+@@ -217,7 +217,6 @@ class InstallCommand(RequirementCommand):
+ 
+         temp_target_dir = None
+         if options.target_dir:
+-            options.ignore_installed = True
+             temp_target_dir = tempfile.mkdtemp()
+             options.target_dir = os.path.abspath(options.target_dir)
+             if (os.path.exists(options.target_dir) and not
+@@ -270,7 +269,7 @@ class InstallCommand(RequirementCommand):
+                     ignore_dependencies=options.ignore_dependencies,
+                     force_reinstall=options.force_reinstall,
+                     use_user_site=options.use_user_site,
+-                    target_dir=temp_target_dir,
++                    target_dir=options.target_dir,
+                     session=session,
+                     pycompile=options.compile,
+                     isolated=options.isolated_mode,
+diff --git a/pip/req/req_install.py b/pip/req/req_install.py
+index 7c5bf8f..0789675 100644
+--- a/pip/req/req_install.py
++++ b/pip/req/req_install.py
+@@ -8,6 +8,7 @@ import sys
+ import tempfile
+ import warnings
+ import zipfile
++from contextlib import contextmanager
+ 
+ from distutils.util import change_root
+ from distutils import sysconfig
+@@ -955,7 +956,21 @@ exec(compile(
+ 
+         self.install_succeeded = True
+ 
+-    def check_if_exists(self):
++    @contextmanager
++    def _extra_working_set(self, target_dir):
++        """Extend pgk_resources working set with path to given target dir."""
++        if target_dir is None:
++            yield
++            return
++        if target_dir not in pkg_resources.working_set.entries:
++            pkg_resources.working_set.add_entry(target_dir)
++        try:
++            yield
++        finally:
++            pkg_resources.working_set.entries.remove(target_dir)
++            del pkg_resources.working_set.entry_keys[target_dir]
++
++    def check_if_exists(self, target_dir=None):
+         """Find an installed distribution that satisfies or conflicts
+         with this requirement, and set self.satisfied_by or
+         self.conflicts_with appropriately.
+@@ -963,7 +978,8 @@ exec(compile(
+         if self.req is None:
+             return False
+         try:
+-            self.satisfied_by = pkg_resources.get_distribution(self.req)
++            with self._extra_working_set(target_dir):
++                self.satisfied_by = pkg_resources.get_distribution(self.req)
+         except pkg_resources.DistributionNotFound:
+             return False
+         except pkg_resources.VersionConflict:
+diff --git a/pip/req/req_set.py b/pip/req/req_set.py
+index 7070a71..22cc337 100644
+--- a/pip/req/req_set.py
++++ b/pip/req/req_set.py
+@@ -352,7 +352,7 @@ class RequirementSet(object):
+         :return: A text reason for why it was skipped, or None.
+         """
+         # Check whether to upgrade/reinstall this req or not.
+-        req_to_install.check_if_exists()
++        req_to_install.check_if_exists(self.target_dir)
+         if req_to_install.satisfied_by:
+             skip_reason = 'satisfied (use --upgrade to upgrade)'
+             if self.upgrade:
