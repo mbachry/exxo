@@ -121,16 +121,22 @@ class Bootstrap:
 
     def install_setuptools(self):
         download_and_unpack(SETUPTOOLS_URL, self.builddir / 'setuptools.tar.gz', self.builddir)
-        setup_py = self.builddir / 'setuptools-{}'.format(SETUPTOOLS_VERSION) / 'setup.py'
-        subprocess.check_call([str(self.pyrun), str(setup_py), 'install'])
+        srcdir = self.builddir / 'setuptools-{}'.format(SETUPTOOLS_VERSION)
+        setup_py = srcdir / 'setup.py'
+        subprocess.check_call([str(self.pyrun), str(setup_py), 'bdist_egg'])
+        egg = srcdir / 'dist' / 'setuptools-{}-py{}.egg'.format(SETUPTOOLS_VERSION, self.python_major_version)
+        egg.rename(self.targetdir / 'setuptools.egg')
 
     def install_pip(self):
         download_and_unpack(PIP_URL, self.builddir / 'pip.tar.gz', self.builddir)
+        setuptools_egg = self.targetdir / 'setuptools.egg'
         pip_src_dir = self.builddir / 'pip-{}'.format(PIP_VERSION)
-        pip_diff = pkgutil.get_data(__package__, 'patches/pip.diff')
-        patch(pip_src_dir, pip_diff)
         setup_py = pip_src_dir / 'setup.py'
-        subprocess.check_call([str(self.pyrun), str(setup_py), 'install'], cwd=str(pip_src_dir))
+        env = os.environ.copy()
+        env['PYTHONPATH'] = '{}:{}'.format(setuptools_egg, env.get('PYTHONPATH', ''))
+        subprocess.check_call([str(self.pyrun), str(setup_py), 'bdist_egg'], cwd=str(pip_src_dir), env=env)
+        egg = pip_src_dir / 'dist' / 'pip-{}-py{}.egg'.format(PIP_VERSION, self.python_major_version)
+        egg.rename(self.targetdir / 'pip.egg')
 
     def render_setup_file(self):
         fn = 'Setup.PyRun-{}'.format(self.python_major_version)
