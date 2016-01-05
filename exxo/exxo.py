@@ -9,6 +9,7 @@ import pkgutil
 import tarfile
 import io
 from pathlib import Path
+import jinja2
 from .bootstrap import PYTHON_VERSION_MAP
 from .venv import ACTIVATE_SCRIPT, PIP_SCRIPT
 
@@ -50,11 +51,12 @@ def create_virtualenv(args):
     (bindir / 'python').symlink_to(pyrun.name)
     (bindir / 'python{}'.format(args.py_version[0])).symlink_to(pyrun.name)
     (bindir / 'python{}'.format(args.py_version)).symlink_to(pyrun.name)
-    activate_buf = ACTIVATE_SCRIPT.replace('__VENV_PATH__', str(envdir.resolve()))
-    activate_buf = activate_buf.replace('__VENV_NAME__', envdir.name)
-    activate_buf = activate_buf.replace('__VENV_PYRUN_VERSION__', args.py_version)
+    tmpl = jinja2.Template(ACTIVATE_SCRIPT)
     with (bindir / 'activate').open('w') as fp:
-        fp.write(activate_buf)
+        fp.write(tmpl.render(
+            venv_path=str(envdir.resolve()),
+            venv_name=envdir.name,
+            pyrun_version=args.py_version))
     # setup include dir
     include_tar = io.BytesIO(pkgutil.get_data(__package__, str(builddir / 'include.tar')))
     with tarfile.open(fileobj=include_tar) as tar:

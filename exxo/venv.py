@@ -37,10 +37,10 @@ deactivate () {
 # unset irrelavent variables
 deactivate nondestructive
 
-VIRTUAL_ENV="__VENV_PATH__"
+VIRTUAL_ENV="{{ venv_path }}"
 export VIRTUAL_ENV
 
-VIRTUAL_ENV_PYRUN_VERSION="__VENV_PYRUN_VERSION__"
+VIRTUAL_ENV_PYRUN_VERSION="{{ pyrun_version }}"
 export VIRTUAL_ENV_PYRUN_VERSION
 
 _OLD_PYTHONPATH="$PYTHONPATH"
@@ -53,8 +53,8 @@ export PATH
 
 if [ -z "$VIRTUAL_ENV_DISABLE_PROMPT" ] ; then
     _OLD_VIRTUAL_PS1="$PS1"
-    if [ "x(__VENV_NAME__) " != x ] ; then
-        PS1="(__VENV_NAME__) $PS1"
+    if [ "x({{ venv_name }}) " != x ] ; then
+        PS1="({{ venv_name }}) $PS1"
     else
     if [ "`basename \"$VIRTUAL_ENV\"`" = "__" ] ; then
         # special case for Aspen magic directories
