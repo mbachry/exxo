@@ -4,6 +4,7 @@ import argparse
 import subprocess
 import zipapp
 import shutil
+import configparser
 from pathlib import Path
 from .bootstrap import PYTHON_VERSION_MAP
 from .venv import ACTIVATE_SCRIPT, PIP_SCRIPT
@@ -60,6 +61,27 @@ def create_virtualenv(args):
     pip_bin.chmod(0o755)
 
 
+def get_project_name(source_path):
+    out = subprocess.check_output(['python', 'setup.py', '--name'], cwd=source_path)
+    return out.decode().strip()
+
+
+def get_entry_point(source_path, project_name=None):
+    project_name = project_name or get_project_name(source_path)
+    subprocess.check_call(['python', 'setup.py', 'egg_info'], cwd=source_path)
+    meta_file = Path(source_path) / '{}.egg-info'.format(project_name) / 'entry_points.txt'
+    conf = configparser.ConfigParser()
+    conf.read(str(meta_file))
+    if not conf.has_section('console_scripts'):
+        sys.exit('no "console_scripts" entry point in setup.py. either provide it or '
+                 'use --main parameter')
+    keys = conf.options('console_scripts')
+    if len(keys) != 1:
+        # TODO; fix it
+        sys.exit('only one console script can be used for now')
+    return conf.get('console_scripts', keys[0])
+
+
 def build(args):
     envdir = os.environ.get('VIRTUAL_ENV')
     if envdir is None:
@@ -73,8 +95,10 @@ def build(args):
     zip_file = envdir / 'app.zip'
     # make sure pip undestands it as a local directory
     source_path = args.source_path.rstrip(os.sep) + os.sep
+    project_name = get_project_name(source_path)
+    entry_point = args.main or get_entry_point(source_path, project_name)
     subprocess.check_call(['pip', 'install', '-U', source_path])
-    zipapp.create_archive(site_packages, zip_file, main=args.main)
+    zipapp.create_archive(site_packages, zip_file, main=entry_point)
     create_binary(Path(args.dest_bin), pyrun, zip_file, args.compress_pyrun)
 
 
@@ -89,8 +113,8 @@ def main():
                              help='python version to use (default: 3.4)')
     parser_venv.set_defaults(func=create_virtualenv)
     parser_build = subparsers.add_parser('build', help='build')
-    parser_build.add_argument('main', help='main function: package.module:function')
     parser_build.add_argument('dest_bin', help='target binary')
+    parser_build.add_argument('--main', help='main function: package.module:function')
     parser_build.add_argument('-s', '--source-path', default='.', help='path to project source')
     parser_build.add_argument('-c', '--compress-pyrun', action='store_true',
                               help='compress pyrun binary with upx')
