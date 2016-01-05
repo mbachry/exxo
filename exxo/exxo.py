@@ -3,7 +3,6 @@ import sys
 import argparse
 import subprocess
 import zipapp
-import zipfile
 import shutil
 from pathlib import Path
 from .bootstrap import PYTHON_VERSION_MAP
@@ -64,7 +63,6 @@ def build(args):
     # make sure pip undestands it as a local directory
     source_path = args.source_path.rstrip(os.sep) + os.sep
     subprocess.check_call(['pip', 'install', '-U', source_path])
-    # TODO: how not to bundle setuptools and pip?
     zipapp.create_archive(site_packages, zip_file, main=args.main)
     create_binary(Path(args.dest_bin), pyrun, zip_file)
 
