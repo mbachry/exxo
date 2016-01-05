@@ -24,7 +24,7 @@ PYTHON_VERSION_MAP = {
 }
 
 PYRUN_VERSION = '2.1.1'
-SETUPTOOLS_VERSION = '19.1.1'
+SETUPTOOLS_VERSION = '19.2'
 PIP_VERSION = '7.1.2'
 NCURSES_VERSION = '5.9+20150516'
 PYRUN_SRC_URL = 'https://downloads.egenix.com/python/egenix-pyrun-{}.tar.gz'.format(PYRUN_VERSION)
