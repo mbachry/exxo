@@ -9,7 +9,18 @@ from .bootstrap import PYTHON_VERSION_MAP
 from .venv import ACTIVATE_SCRIPT, PIP_SCRIPT
 
 
-def create_binary(dst_path, pyrun, zip_file):
+def create_binary(dst_path, pyrun, zip_file, compress_pyrun):
+    if compress_pyrun:
+        pyrun_upx = pyrun.with_name(pyrun.name + '.compressed')
+        if not pyrun_upx.exists():
+            pyrun_upx_tmp = pyrun_upx.with_name(pyrun_upx.name + '.tmp')
+            shutil.copy(str(pyrun), str(pyrun_upx_tmp))
+            try:
+                subprocess.check_call(['upx', str(pyrun_upx_tmp)])
+            except FileNotFoundError:
+                sys.exit('error: compression is enabled, but upx command was not found')
+            pyrun_upx_tmp.rename(pyrun_upx)
+        pyrun = pyrun_upx
     with dst_path.open('wb') as dst_fp, pyrun.open('rb') as pyrun_fp, zip_file.open('rb') as zip_fp:
         shutil.copyfileobj(pyrun_fp, dst_fp)
         shutil.copyfileobj(zip_fp, dst_fp)
@@ -64,7 +75,7 @@ def build(args):
     source_path = args.source_path.rstrip(os.sep) + os.sep
     subprocess.check_call(['pip', 'install', '-U', source_path])
     zipapp.create_archive(site_packages, zip_file, main=args.main)
-    create_binary(Path(args.dest_bin), pyrun, zip_file)
+    create_binary(Path(args.dest_bin), pyrun, zip_file, args.compress_pyrun)
 
 
 def main():
@@ -81,6 +92,8 @@ def main():
     parser_build.add_argument('main', help='main function: package.module:function')
     parser_build.add_argument('dest_bin', help='target binary')
     parser_build.add_argument('-s', '--source-path', default='.', help='path to project source')
+    parser_build.add_argument('-c', '--compress-pyrun', action='store_true',
+                              help='compress pyrun binary with upx')
     parser_build.set_defaults(func=build)
     args = parser.parse_args()
     args.func(args)
