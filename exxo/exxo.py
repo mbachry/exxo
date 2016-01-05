@@ -22,6 +22,9 @@ def create_binary(dst_path, pyrun, zip_file, compress_pyrun):
                 sys.exit('error: compression is enabled, but upx command was not found')
             pyrun_upx_tmp.rename(pyrun_upx)
         pyrun = pyrun_upx
+    basedir = dst_path.parent
+    if basedir:
+        basedir.mkdir(parents=True, exist_ok=True)
     with dst_path.open('wb') as dst_fp, pyrun.open('rb') as pyrun_fp, zip_file.open('rb') as zip_fp:
         shutil.copyfileobj(pyrun_fp, dst_fp)
         shutil.copyfileobj(zip_fp, dst_fp)
@@ -98,8 +101,9 @@ def build(args):
     project_name = get_project_name(source_path)
     entry_point = args.main or get_entry_point(source_path, project_name)
     subprocess.check_call(['pip', 'install', '-U', source_path])
+    dst_bin = Path(args.output or (Path(source_path) / 'target' / project_name))
     zipapp.create_archive(site_packages, zip_file, main=entry_point)
-    create_binary(Path(args.dest_bin), pyrun, zip_file, args.compress_pyrun)
+    create_binary(dst_bin, pyrun, zip_file, args.compress_pyrun)
 
 
 def main():
@@ -113,7 +117,7 @@ def main():
                              help='python version to use (default: 3.4)')
     parser_venv.set_defaults(func=create_virtualenv)
     parser_build = subparsers.add_parser('build', help='build')
-    parser_build.add_argument('dest_bin', help='target binary')
+    parser_build.add_argument('-o', '--output', help='target binary')
     parser_build.add_argument('--main', help='main function: package.module:function')
     parser_build.add_argument('-s', '--source-path', default='.', help='path to project source')
     parser_build.add_argument('-c', '--compress-pyrun', action='store_true',
