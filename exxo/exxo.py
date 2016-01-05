@@ -5,6 +5,9 @@ import subprocess
 import zipapp
 import shutil
 import configparser
+import pkgutil
+import tarfile
+import io
 from pathlib import Path
 from .bootstrap import PYTHON_VERSION_MAP
 from .venv import ACTIVATE_SCRIPT, PIP_SCRIPT
@@ -32,11 +35,7 @@ def create_binary(dst_path, pyrun, zip_file, compress_pyrun):
 
 
 def create_virtualenv(args):
-    builddir = Path('build')
-    targetdir = builddir / 'target-{}'.format(args.py_version)
-    if not targetdir.exists():
-        sys.exit('unsupported python version: {}'.format(args.py_version))
-    pyrun = (targetdir / 'bin' / 'pyrun{}'.format(args.py_version)).resolve()
+    builddir = Path('pyrun') / args.py_version
     envdir = Path(args.envdir)
     bindir = envdir / 'bin'
     libdir = envdir / 'lib' / 'python{}'.format(args.py_version) / 'site-packages'
@@ -44,7 +43,10 @@ def create_virtualenv(args):
     for d in (bindir, libdir, pipdir):
         d.mkdir(parents=True, exist_ok=True)
     # setup bin dir
-    shutil.copy(str(pyrun), str(bindir))
+    pyrun = bindir / 'pyrun{}'.format(args.py_version)
+    with pyrun.open('wb') as fp:
+        fp.write(pkgutil.get_data(__package__, str(builddir / 'pyrun')))
+    pyrun.chmod(0o755)
     (bindir / 'python').symlink_to(pyrun.name)
     (bindir / 'python{}'.format(args.py_version[0])).symlink_to(pyrun.name)
     (bindir / 'python{}'.format(args.py_version)).symlink_to(pyrun.name)
@@ -54,10 +56,14 @@ def create_virtualenv(args):
     with (bindir / 'activate').open('w') as fp:
         fp.write(activate_buf)
     # setup include dir
-    shutil.copytree(str(targetdir / 'include'), str(envdir / 'include'))
+    include_tar = io.BytesIO(pkgutil.get_data(__package__, str(builddir / 'include.tar')))
+    with tarfile.open(fileobj=include_tar) as tar:
+        tar.extractall(str(envdir))
     # install setuptools & pip
-    shutil.copy(str(targetdir / 'setuptools.egg'), str(pipdir))
-    shutil.copy(str(targetdir / 'pip.egg'), str(pipdir))
+    with (pipdir / 'setuptools.egg').open('wb') as fp:
+        fp.write(pkgutil.get_data(__package__, str(builddir / 'setuptools.egg')))
+    with (pipdir / 'pip.egg').open('wb') as fp:
+        fp.write(pkgutil.get_data(__package__, str(builddir / 'pip.egg')))
     pip_bin = bindir / 'pip'
     with (pip_bin).open('w') as fp:
         fp.write(PIP_SCRIPT)

@@ -98,6 +98,8 @@ class Bootstrap:
         ensure_dir_exists(builddir)
         self.builddir = builddir.resolve()
         self.targetdir = self.builddir / 'target-{}'.format(self.python_major_version)
+        self.final_dstdir = Path('exxo') / 'pyrun' / self.python_major_version
+        ensure_dir_exists(self.final_dstdir)
         self.pyrun_dir = self.builddir / PYRUN_SRC_DIR / 'PyRun'
         self.pyrun = self.targetdir / 'bin' / 'pyrun{}'.format(self.python_major_version)
         self.arch = os.uname().machine
@@ -125,7 +127,7 @@ class Bootstrap:
         setup_py = srcdir / 'setup.py'
         subprocess.check_call([str(self.pyrun), str(setup_py), 'bdist_egg'])
         egg = srcdir / 'dist' / 'setuptools-{}-py{}.egg'.format(SETUPTOOLS_VERSION, self.python_major_version)
-        egg.rename(self.targetdir / 'setuptools.egg')
+        egg.rename(self.final_dstdir / 'setuptools.egg')
 
     def install_pip(self):
         download_and_unpack(PIP_URL, self.builddir / 'pip.tar.gz', self.builddir)
@@ -136,7 +138,7 @@ class Bootstrap:
         env['PYTHONPATH'] = '{}:{}'.format(setuptools_egg, env.get('PYTHONPATH', ''))
         subprocess.check_call([str(self.pyrun), str(setup_py), 'bdist_egg'], cwd=str(pip_src_dir), env=env)
         egg = pip_src_dir / 'dist' / 'pip-{}-py{}.egg'.format(PIP_VERSION, self.python_major_version)
-        egg.rename(self.targetdir / 'pip.egg')
+        egg.rename(self.final_dstdir / 'pip.egg')
 
     def render_setup_file(self):
         fn = 'Setup.PyRun-{}'.format(self.python_major_version)
@@ -185,11 +187,19 @@ class Bootstrap:
         pyrun_bin.rename(self.pyrun)
         (pyrun_target_dir / 'include').rename(self.targetdir / 'include')
 
+    def install_binaries(self):
+        shutil.copy(str(self.pyrun), str(self.final_dstdir / 'pyrun'))
+        # pack includes
+        include_tar = self.final_dstdir / 'include.tar'
+        with tarfile.open(str(include_tar), 'w:xz') as tar:
+            tar.add(str(self.targetdir / 'include'), arcname='include')
+
     def bootstrap(self):
         self.install_ncurses()
         self.install_pyrun()
         self.install_setuptools()
         self.install_pip()
+        self.install_binaries()
 
 
 def main():

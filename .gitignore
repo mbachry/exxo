@@ -18,6 +18,7 @@ develop-eggs
 lib
 lib64
 target/
+exxo/pyrun/
 
 # Installer logs
 pip-log.txt
