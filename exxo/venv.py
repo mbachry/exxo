@@ -88,12 +88,18 @@ setuptools_egg = os.path.join(eggdir, 'setuptools.egg')
 pip_egg = os.path.join(eggdir, 'pip.egg')
 
 for d in (eggdir, setuptools_egg, pip_egg):
-    pkg_resources.working_set.entries.remove(d)
-    pip._vendor.pkg_resources.working_set.entries.remove(d)
+    try:
+        pkg_resources.working_set.entries.remove(d)
+    except ValueError:
+        pass
+    try:
+        pip._vendor.pkg_resources.working_set.entries.remove(d)
+    except ValueError:
+        pass
 
 for p in ('setuptools', 'pip'):
-    del pkg_resources.working_set.by_key[p]
-    del pip._vendor.pkg_resources.working_set.by_key[p]
+    pkg_resources.working_set.by_key.pop(p, None)
+    pip._vendor.pkg_resources.working_set.by_key.pop(p, None)
 
 sys.exit(pip.main())
 """

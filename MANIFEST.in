@@ -3,5 +3,6 @@ include LICENSE
 include README.rst
 
 recursive-include tests *
+recursive-include exxo/pyrun *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]

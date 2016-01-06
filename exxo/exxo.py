@@ -2,7 +2,6 @@ import os
 import sys
 import argparse
 import subprocess
-import zipapp
 import shutil
 import configparser
 import pkgutil
@@ -10,8 +9,9 @@ import tarfile
 import io
 from pathlib import Path
 import jinja2
-from .bootstrap import PYTHON_VERSION_MAP
+from .bootstrap import PYTHON_VERSION_MAP, ensure_dir_exists
 from .venv import ACTIVATE_SCRIPT, PIP_SCRIPT
+from . import zipapp
 
 
 def create_binary(dst_path, pyrun, zip_file, compress_pyrun):
@@ -28,7 +28,7 @@ def create_binary(dst_path, pyrun, zip_file, compress_pyrun):
         pyrun = pyrun_upx
     basedir = dst_path.parent
     if basedir:
-        basedir.mkdir(parents=True, exist_ok=True)
+        ensure_dir_exists(basedir)
     with dst_path.open('wb') as dst_fp, pyrun.open('rb') as pyrun_fp, zip_file.open('rb') as zip_fp:
         shutil.copyfileobj(pyrun_fp, dst_fp)
         shutil.copyfileobj(zip_fp, dst_fp)
@@ -42,7 +42,7 @@ def create_virtualenv(args):
     libdir = envdir / 'lib' / 'python{}'.format(args.py_version) / 'site-packages'
     pipdir = envdir / 'pip'
     for d in (bindir, libdir, pipdir):
-        d.mkdir(parents=True, exist_ok=True)
+        ensure_dir_exists(d)
     # setup bin dir
     pyrun = bindir / 'pyrun{}'.format(args.py_version)
     with pyrun.open('wb') as fp:

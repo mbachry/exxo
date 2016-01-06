@@ -1,18 +1,11 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
-
+#!/usr/bin/env python3
+from setuptools import setup
 
 with open('README.rst') as readme_file:
     readme = readme_file.read()
 
 requirements = [
-    # TODO: put package requirements here
+    'jinja2',
 ]
 
 test_requirements = [
@@ -22,21 +15,22 @@ test_requirements = [
 setup(
     name='exxo',
     version='0.0.1',
-    description="Python Boilerplate contains all the boilerplate you need to create a Python package.",
+    description="Build portable Python apps",
     long_description=readme,
     author="Marcin Bachry",
     author_email='hegel666@gmail.com',
     url='https://github.com/mbachry/exxo',
-    packages=[
-        'exxo',
-    ],
-    package_dir={'exxo':
-                 'exxo'},
+    packages=['exxo'],
+    package_dir={'exxo': 'exxo'},
     include_package_data=True,
     install_requires=requirements,
     license="ISCL",
     zip_safe=True,
-    keywords='exxo',
+    entry_points={
+        'console_scripts': [
+            'exxo = exxo.exxo:main',
+        ]
+    },
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
@@ -46,7 +40,7 @@ setup(
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
-    ],
-    test_suite='tests',
-    tests_require=test_requirements
+    ]
+    # test_suite='tests',
+    # tests_require=test_requirements
 )

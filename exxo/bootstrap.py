@@ -61,7 +61,10 @@ NCURSES_CONFIGURE_ARGS = [
 
 
 def ensure_dir_exists(d):
-    d.mkdir(parents=True, exist_ok=True)
+    try:
+        d.mkdir(parents=True)
+    except FileExistsError:
+        pass
 
 
 def download_url(url, dst_file):
@@ -112,6 +115,8 @@ class Bootstrap:
                               cwd=str(self.pyrun_dir))
 
     def install_ncurses(self):
+        if (self.ncurses_dir / 'include').exists():
+            return
         download_and_unpack(NCURSES_URL, self.builddir / 'ncurses.tar.gz', self.builddir)
         srcdir = self.builddir / 'ncurses-{}'.format(NCURSES_VERSION.replace('+', '-'))
         ensure_dir_exists(self.ncurses_dir)
@@ -131,7 +136,7 @@ class Bootstrap:
 
     def install_pip(self):
         download_and_unpack(PIP_URL, self.builddir / 'pip.tar.gz', self.builddir)
-        setuptools_egg = self.targetdir / 'setuptools.egg'
+        setuptools_egg = (self.final_dstdir / 'setuptools.egg').resolve()
         pip_src_dir = self.builddir / 'pip-{}'.format(PIP_VERSION)
         setup_py = pip_src_dir / 'setup.py'
         env = os.environ.copy()

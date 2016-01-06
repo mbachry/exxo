@@ -93,7 +93,7 @@ diff --git a/PyRun/Runtime/Setup.PyRun-3.4 b/PyRun/Runtime/Setup.PyRun-3.4.tmpl
 similarity index 88%
 rename from PyRun/Runtime/Setup.PyRun-3.4
 rename to PyRun/Runtime/Setup.PyRun-3.4.tmpl
-index 47629a2..cba3306 100644
+index 47629a2..b66b10c 100644
 --- a/PyRun/Runtime/Setup.PyRun-3.4
 +++ b/PyRun/Runtime/Setup.PyRun-3.4.tmpl
 @@ -208,7 +208,7 @@ _socket socketmodule.c
@@ -123,7 +123,7 @@ index 47629a2..cba3306 100644
  
  # _lsprof
  _lsprof _lsprof.c rotatingtree.c
-@@ -449,10 +449,71 @@ _sqlite3 \
+@@ -449,10 +449,73 @@ _sqlite3 \
  	$(SQLITE_DEFS) -I$(srcdir)/Modules/_sqlite \
  	$(SQLITE_LIBS) \
  	-I$(prefix)/include -L$(exec_prefix)/lib \
@@ -133,6 +133,8 @@ index 47629a2..cba3306 100644
  # bz2
 -_bz2 _bz2module.c -lbz2
 +_bz2 _bz2module.c -Wl,-Bstatic -lbz2 -Wl,-Bdynamic
++
++_lzma _lzmamodule.c -Wl,-Bstatic -llzma -Wl,-Bdynamic
  
  # _json
  _json _json.c
