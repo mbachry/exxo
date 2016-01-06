@@ -4,6 +4,7 @@ requirements = [
     'Flask',
     'gunicorn',
     'gevent==1.1rc3',
+    'setuptools',
 ]
 
 setup(
