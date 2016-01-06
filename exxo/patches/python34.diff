@@ -1,18 +1,3 @@
-diff --git a/Lib/pkgutil.py b/Lib/pkgutil.py
-index a54e947..5609764 100644
---- a/Lib/pkgutil.py
-+++ b/Lib/pkgutil.py
-@@ -624,6 +624,9 @@ def get_data(package, resource):
-     # signature - an os.path format "filename" starting with the dirname of
-     # the package's __file__
-     parts = resource.split('/')
--    parts.insert(0, os.path.dirname(mod.__file__))
-+    prefix = os.path.dirname(mod.__file__)
-+    if os.path.basename(prefix) == '__pycache__':
-+        prefix = os.path.dirname(prefix)
-+    parts.insert(0, prefix)
-     resource_name = os.path.join(*parts)
-     return loader.get_data(resource_name)
 diff --git a/Makefile.pre.in b/Makefile.pre.in
 index e19fc00..4d372e9 100644
 --- a/Makefile.pre.in
@@ -50,7 +35,7 @@ index 8b5cc28..8666e5c 100755
  			esac
  			obj="$srcdir/$obj"
 diff --git a/Modules/zipimport.c b/Modules/zipimport.c
-index f2cc245..ba81260 100644
+index f2cc245..f219e75 100644
 --- a/Modules/zipimport.c
 +++ b/Modules/zipimport.c
 @@ -3,14 +3,16 @@
@@ -312,7 +297,48 @@ index f2cc245..ba81260 100644
      code = get_module_code(self, fullname, &ispackage, &modpath);
      if (code == NULL)
          goto error;
-@@ -1378,11 +1530,27 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1369,6 +1521,40 @@ get_code_from_data(ZipImporter *self, int ispackage, int isbytecode,
+     return code;
+ }
+ 
++/* Convert /path/to/__pycache/foo.pyc into /path/to/foo.pyc for
++ * compatibility reasons. Neither pkgutil nor pkg_resources will work
++ * with __pycache__ path at the moment. */
++static PyObject *
++strip_pycache_from_path(PyObject *path)
++{
++    wchar_t *s, *sub, *sub2;
++    PyObject *result = NULL, *newpath;
++
++    s = PyUnicode_AsWideCharString(path, NULL);
++    if (s == NULL)
++        return NULL;
++
++    sub = wcsstr(s, L"__pycache__");
++    if (sub == NULL) {
++        Py_INCREF(path);
++        result = path;
++        goto exit;
++    }
++
++    sub2 = sub + wcslen(L"__pycache__");
++    wmemmove(sub, sub2 + 1, wcslen(sub2) + 1);
++
++    newpath = PyUnicode_FromWideChar(s, wcslen(s));
++    if (newpath == NULL)
++        goto exit;
++
++    result = newpath;
++
++exit:
++    PyMem_Free(s);
++    return result;
++}
++
+ /* Get the code object associated with the module specified by
+    'fullname'. */
+ static PyObject *
+@@ -1378,11 +1564,25 @@ get_module_code(ZipImporter *self, PyObject *fullname,
      PyObject *code = NULL, *toc_entry, *subname;
      PyObject *path, *fullpath = NULL;
      struct st_zip_searchorder *zso;
@@ -326,10 +352,8 @@ index f2cc245..ba81260 100644
 +    if (toc_entry != NULL) {
 +        code = get_code_from_data(self, 0, 1, mtime, toc_entry);
 +        if (code != Py_None) {
-+            if (code != NULL && p_modpath != NULL) {
-+                *p_modpath = PyTuple_GetItem(toc_entry, 0);
-+                Py_INCREF(*p_modpath);
-+            }
++            if (code != NULL && p_modpath != NULL)
++                *p_modpath = strip_pycache_from_path(PyTuple_GetItem(toc_entry, 0));
 +            *p_ispackage = 0;
 +            Py_DECREF(subname);
 +            return code;
@@ -340,7 +364,7 @@ index f2cc245..ba81260 100644
      path = make_filename(self->prefix, subname);
      Py_DECREF(subname);
      if (path == NULL)
-@@ -1400,7 +1568,6 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1400,7 +1600,6 @@ get_module_code(ZipImporter *self, PyObject *fullname,
                                 self->archive, (int)SEP, fullpath);
          toc_entry = PyDict_GetItem(self->files, fullpath);
          if (toc_entry != NULL) {
@@ -348,7 +372,7 @@ index f2cc245..ba81260 100644
              int ispackage = zso->type & IS_PACKAGE;
              int isbytecode = zso->type & IS_BYTECODE;
  
-@@ -1413,6 +1580,17 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1413,6 +1612,17 @@ get_module_code(ZipImporter *self, PyObject *fullname,
              Py_CLEAR(fullpath);
              if (p_ispackage != NULL)
                  *p_ispackage = ispackage;
@@ -366,7 +390,20 @@ index f2cc245..ba81260 100644
              code = get_code_from_data(self, ispackage,
                                        isbytecode, mtime,
                                        toc_entry);
-@@ -1467,6 +1645,54 @@ static struct PyModuleDef zipimportmodule = {
+@@ -1422,10 +1632,8 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+                 Py_DECREF(code);
+                 continue;
+             }
+-            if (code != NULL && p_modpath != NULL) {
+-                *p_modpath = PyTuple_GetItem(toc_entry, 0);
+-                Py_INCREF(*p_modpath);
+-            }
++            if (code != NULL && p_modpath != NULL)
++                *p_modpath = strip_pycache_from_path(PyTuple_GetItem(toc_entry, 0));
+             goto exit;
+         }
+         else
+@@ -1467,6 +1675,54 @@ static struct PyModuleDef zipimportmodule = {
      NULL
  };
  
@@ -421,7 +458,7 @@ index f2cc245..ba81260 100644
  PyMODINIT_FUNC
  PyInit_zipimport(void)
  {
-@@ -1475,20 +1701,8 @@ PyInit_zipimport(void)
+@@ -1475,20 +1731,8 @@ PyInit_zipimport(void)
      if (PyType_Ready(&ZipImporter_Type) < 0)
          return NULL;
  
