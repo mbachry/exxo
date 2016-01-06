@@ -2,7 +2,7 @@ diff --git a/PyRun/Runtime/Setup.PyRun-2.7 b/PyRun/Runtime/Setup.PyRun-2.7.tmpl
 similarity index 92%
 rename from PyRun/Runtime/Setup.PyRun-2.7
 rename to PyRun/Runtime/Setup.PyRun-2.7.tmpl
-index ad9ed96..855f7d7 100644
+index ad9ed96..05bb4f0 100644
 --- a/PyRun/Runtime/Setup.PyRun-2.7
 +++ b/PyRun/Runtime/Setup.PyRun-2.7.tmpl
 @@ -242,7 +242,7 @@ _socket socketmodule.c
@@ -45,7 +45,7 @@ index ad9ed96..855f7d7 100644
  
  # _json
  _json _json.c
-@@ -578,3 +578,43 @@ _io	-IModules/_io \
+@@ -578,3 +578,44 @@ _io	-IModules/_io \
  
  # _scproxy (used on Mac OS X only)
  # @if macosx: _scproxy ../Mac/Modules/_scproxy.c -framework SystemConfiguration -framework CoreFoundation
@@ -69,7 +69,8 @@ index ad9ed96..855f7d7 100644
 +	_ctypes/libffi/src/x86/sysv.S \
 +	-I$(srcdir)/Modules/_ctypes/libffi/src \
 +	-I$(srcdir)/Modules/_ctypes/libffi/include \
-+	-I$(srcdir)/build/temp.linux-x86_64-2.7/libffi
++	-I$(srcdir)/build/temp.linux-{{ arch }}-2.7/libffi \
++	-I$(srcdir)/build/temp.linux-{{ arch }}-2.7/libffi/include
 +
 +spwd spwdmodule.c
 +
@@ -90,10 +91,10 @@ index ad9ed96..855f7d7 100644
 +
 +parser parsermodule.c
 diff --git a/PyRun/Runtime/Setup.PyRun-3.4 b/PyRun/Runtime/Setup.PyRun-3.4.tmpl
-similarity index 88%
+similarity index 87%
 rename from PyRun/Runtime/Setup.PyRun-3.4
 rename to PyRun/Runtime/Setup.PyRun-3.4.tmpl
-index 47629a2..b66b10c 100644
+index 47629a2..9ee40d6 100644
 --- a/PyRun/Runtime/Setup.PyRun-3.4
 +++ b/PyRun/Runtime/Setup.PyRun-3.4.tmpl
 @@ -208,7 +208,7 @@ _socket socketmodule.c
@@ -123,7 +124,7 @@ index 47629a2..b66b10c 100644
  
  # _lsprof
  _lsprof _lsprof.c rotatingtree.c
-@@ -449,10 +449,73 @@ _sqlite3 \
+@@ -449,10 +449,74 @@ _sqlite3 \
  	$(SQLITE_DEFS) -I$(srcdir)/Modules/_sqlite \
  	$(SQLITE_LIBS) \
  	-I$(prefix)/include -L$(exec_prefix)/lib \
@@ -157,7 +158,8 @@ index 47629a2..b66b10c 100644
 +	_ctypes/libffi/src/x86/sysv.S \
 +	-I$(srcdir)/Modules/_ctypes/libffi/src \
 +	-I$(srcdir)/Modules/_ctypes/libffi/include \
-+	-I$(srcdir)/build/temp.linux-{{ arch }}-3.4/libffi
++	-I$(srcdir)/build/temp.linux-{{ arch }}-3.4/libffi \
++	-I$(srcdir)/build/temp.linux-{{ arch }}-3.4/libffi/include
 +
 +spwd spwdmodule.c
 +
