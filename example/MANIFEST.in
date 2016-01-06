@@ -1,0 +1,2 @@
+recursive-include myip/templates *
+recursive-include myip/static *

@@ -1,15 +1,31 @@
+import os
 import multiprocessing
+import pkgutil
 import gunicorn.app.base
-from flask import Flask, request
+import io
+from flask import Flask, request, render_template
+from flask.helpers import send_file
+from jinja2 import PackageLoader
+
 
 PORT = 9000
 
-app = Flask(__name__)
+
+class MyFlask(Flask):
+    def send_static_file(self, filename):
+        p = '/'.join((os.path.basename(self.static_folder), filename))
+        data = pkgutil.get_data(self.import_name, p)
+        fp = io.BytesIO(data)
+        return send_file(fp, 'text/css')
+
+
+app = MyFlask('myip')
+app.jinja_loader = PackageLoader('myip', 'templates')
 
 
 @app.route('/')
 def show_ip():
-    return request.remote_addr
+    return render_template('index.html', ip=request.remote_addr)
 
 
 
@@ -30,6 +46,7 @@ class StandaloneApplication(gunicorn.app.base.BaseApplication):
 
 
 def main():
+    # app.run(debug=True)
     options = {
         'bind': '%s:%s' % ('127.0.0.1', PORT),
         'workers': (multiprocessing.cpu_count() * 2) + 1,
