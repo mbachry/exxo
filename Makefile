@@ -14,7 +14,7 @@ help:
 build:
 	rm -fr env target/exxo
 	python3 -m exxo.exxo venv env
-	bash -c "source env/bin/activate && /usr/bin/python3 -m exxo.exxo build -c"
+	bash -c "source env/bin/activate && $(shell which python3) -m exxo.exxo build -c"
 
 clean: clean-build clean-test
 
