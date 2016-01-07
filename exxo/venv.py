@@ -15,11 +15,9 @@ deactivate () {
         hash -r
     fi
 
-    if [ -n "$_OLD_PYTHONPATH" ] ; then
-        PYTHONPATH="$_OLD_PYTHONPATH"
-        export PYTHONPATH
-        unset _OLD_PYTHONPATH
-    fi
+    PYTHONPATH="$_OLD_PYTHONPATH"
+    export PYTHONPATH
+    unset _OLD_PYTHONPATH
 
     if [ -n "$_OLD_VIRTUAL_PS1" ] ; then
         PS1="$_OLD_VIRTUAL_PS1"
