@@ -19,6 +19,7 @@ lib
 lib64
 target/
 exxo/pyrun/
+env/
 
 # Installer logs
 pip-log.txt
