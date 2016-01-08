@@ -94,7 +94,7 @@ Because your application is run as zipapp, it must be zip safe. This
 applies to all dependencies too, with Django being main offender,
 unfortunately (but see `example/myip/myip.py`_ for tips how to use
 Flask). The main violation against zip safety is using filesystem API
-to read data files from inside your package. Don't do it::
+to read data files from inside your package. Don't do this::
 
     open(os.path.join(os.path.dirname(__file__), 'index.html'))
 
