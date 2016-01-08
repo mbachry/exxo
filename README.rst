@@ -92,7 +92,7 @@ Centos 6.
 
 Because your application is run as zipapp, it must be zip safe. This
 applies to all dependencies too, with Django being main offender,
-unfortunately (but see ``example/myip/myip.py`` for tips how to use
+unfortunately (but see `example/myip/myip.py`_ for tips how to use
 Flask). The main violation against zip safety is using filesystem API
 to read data files from inside your package. Don't do it::
 
@@ -111,6 +111,7 @@ correctly.
 
 .. _pkgutil: https://docs.python.org/3/library/pkgutil.html
 .. _pkg_resources: https://pythonhosted.org/setuptools/pkg_resources.html
+.. _example/myip/myip.py: https://github.com/mbachry/exxo/blob/master/example/myip/myip.py
 
 Building exxo from sources
 --------------------------
