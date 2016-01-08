@@ -17,7 +17,7 @@ proves to be the most portable one (PyRun already works on most major
 platforms). There's also an assumption that over time zipapps become
 more popular and more essential packages will become zip safe.
 
-In order for exxo to be practical, PyRun and CPython was patched in
+In order for exxo to be practical, PyRun and CPython were patched in
 the following ways:
 
 * zipimport supports loading C extensions (otherwise too many pip
