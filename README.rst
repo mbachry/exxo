@@ -2,7 +2,7 @@
 exxo
 ====
 
-**Only Linux supported for now**
+**Only Linux x86_64 supported for now**
 
 Build your Python package into a portable one-file binary and deploy
 it just by copying it to target machine. The binary links to libc only
