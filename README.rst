@@ -72,7 +72,7 @@ If you have upx installed (``apt-get install upx`` or ``dnf install
 upx``) you can use ``-c`` flag (``exxo build -c``) to compress PyRun
 binary and save some space.
 
-.. _here: https://bintray.com/artifact/download/mbachry/exxo/exxo-0.0.1.tar.xz
+.. _here: https://bintray.com/artifact/download/mbachry/exxo/exxo-0.0.2.tar.xz
 .. _exxo git repository: https://github.com/mbachry/exxo/
 
 Caveats

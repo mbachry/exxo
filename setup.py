@@ -14,7 +14,7 @@ test_requirements = [
 
 setup(
     name='exxo',
-    version='0.0.1',
+    version='0.0.2',
     description="Build portable Python apps",
     long_description=readme,
     author="Marcin Bachry",
