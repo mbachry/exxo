@@ -214,7 +214,7 @@ index a52124c..08f1318 100755
      # default prefix and exec_prefix
      if not exec_prefix:
 diff --git a/PyRun/Runtime/pyrun_template.py b/PyRun/Runtime/pyrun_template.py
-index 983a6ca..8cad76e 100644
+index 983a6ca..3998734 100644
 --- a/PyRun/Runtime/pyrun_template.py
 +++ b/PyRun/Runtime/pyrun_template.py
 @@ -44,6 +44,7 @@ COPYRIGHT = """\
@@ -225,25 +225,35 @@ index 983a6ca..8cad76e 100644
  import pyrun_config
  from pyrun_config import (
      pyrun_name,
-@@ -743,8 +744,10 @@ if __name__ == '__main__':
-     if pyrun_debug > 1:
-         pyrun_info()
+@@ -729,8 +730,11 @@ def pyrun_execute_script(pyrun_script, mode='file'):
+ 
+ if __name__ == '__main__':
  
 +    running_from_zip = zipfile.is_zipfile(sys.executable)
 +
+     # Parse the command line and get the script name
+-    pyrun_parse_cmdline()
++    if not running_from_zip:
++        pyrun_parse_cmdline()
+ 
+     # Enable unbuffered mode
+     if pyrun_unbuffered:
+@@ -744,7 +748,7 @@ if __name__ == '__main__':
+         pyrun_info()
+ 
      # Start the runtime
 -    if not sys.argv and sys.stdin.isatty():
 +    if not sys.argv and sys.stdin.isatty() and not running_from_zip:
  
          ### Enter interactive mode
  
-@@ -767,8 +770,11 @@ if __name__ == '__main__':
+@@ -767,8 +771,11 @@ if __name__ == '__main__':
  
          ### Run a script
  
 +        if running_from_zip:
 +            pyrun_script = sys.executable
-+            sys.argv.insert(0, sys.executable)
++            sys.argv[0] = sys.executable
          # Setup script to run
 -        if not sys.argv:
 +        elif not sys.argv:
