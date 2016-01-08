@@ -12,6 +12,8 @@ from jinja2 import PackageLoader
 PORT = 5000
 
 
+# extend standard Flask class in a way that enables loading templates
+# and static files from a zipapp
 class ZipFlask(Flask):
     def send_static_file(self, filename):
         static_folder = os.path.relpath(self.static_folder, self.root_path)
