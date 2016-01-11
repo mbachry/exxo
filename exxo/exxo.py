@@ -6,6 +6,7 @@ import shutil
 import configparser
 import pkgutil
 import tarfile
+import tempfile
 import io
 from pathlib import Path
 import jinja2
@@ -79,10 +80,13 @@ def get_project_name(source_path):
 
 def get_entry_point(source_path, project_name=None):
     project_name = project_name or get_project_name(source_path)
-    subprocess.check_call(['python', 'setup.py', 'egg_info'], cwd=source_path)
-    meta_file = Path(source_path) / '{}.egg-info'.format(project_name) / 'entry_points.txt'
     conf = configparser.ConfigParser()
-    conf.read(str(meta_file))
+    with tempfile.TemporaryDirectory() as tempdir:
+        subprocess.check_call(['python', 'setup.py', 'egg_info',
+                               '--egg-base={}'.format(tempdir)],
+                              cwd=source_path)
+        meta_file = Path(tempdir) / '{}.egg-info'.format(project_name) / 'entry_points.txt'
+        conf.read(str(meta_file))
     if not conf.has_section('console_scripts'):
         sys.exit('no "console_scripts" entry point in setup.py. either provide it or '
                  'use --main parameter')
