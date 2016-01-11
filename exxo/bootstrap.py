@@ -19,7 +19,7 @@ PYTHON_VERSION_MAP = {
     '2.7': {
         'full_version': '2.7.11',
         'patch': Path('patches/python27.diff'),
-        'unicode': 'ucs2',
+        'unicode': 'ucs4',
     },
 }
 
@@ -111,7 +111,9 @@ class Bootstrap:
     def pyrun_make(self, target):
         # pyrun seems to compile incorrectly, if compiled with -jN
         # larger than 1
-        subprocess.check_call(['make', '-j1', target, 'PYTHONFULLVERSION=' + self.python_full_version],
+        subprocess.check_call(['make', '-j1', target,
+                               'PYTHONUNICODE=' + self.meta['unicode'],
+                               'PYTHONFULLVERSION=' + self.python_full_version],
                               cwd=str(self.pyrun_dir))
 
     def install_ncurses(self):
