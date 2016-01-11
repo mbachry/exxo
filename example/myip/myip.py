@@ -1,33 +1,11 @@
-import os
 import multiprocessing
-import pkgutil
 import gunicorn.app.base
-import io
-import mimetypes
 from flask import Flask, request, render_template
-from flask.helpers import send_file, locked_cached_property
-from jinja2 import PackageLoader
 
 
 PORT = 5000
 
-
-# extend standard Flask class in a way that enables loading templates
-# and static files from a zipapp
-class ZipFlask(Flask):
-    def send_static_file(self, filename):
-        static_folder = os.path.relpath(self.static_folder, self.root_path)
-        p = '/'.join((static_folder, filename))
-        data = pkgutil.get_data(self.import_name, p)
-        fp = io.BytesIO(data)
-        return send_file(fp, mimetypes.guess_type(filename)[0])
-
-    @locked_cached_property
-    def jinja_loader(self):
-        return PackageLoader(self.import_name, self.template_folder)
-
-
-app = ZipFlask('myip')
+app = Flask('myip')
 
 
 @app.route('/')

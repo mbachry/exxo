@@ -1,3 +1,72 @@
+diff --git a/Lib/_hack.py b/Lib/_hack.py
+new file mode 100644
+index 0000000..b8f294a
+--- /dev/null
++++ b/Lib/_hack.py
+@@ -0,0 +1,63 @@
++import sys
++import os
++import posix
++import stat
++import zipfile
++import errno
++
++
++if zipfile.is_zipfile(sys.executable):
++    exe_zip = zipfile.ZipFile(sys.executable, 'r')
++    exe_names = exe_zip.namelist()
++zip_cache = {}
++
++
++def cached(func):
++    cache = zip_cache.setdefault(func, {})
++    def wrapped(*args):
++        ent = cache.get(args)
++        if ent is None:
++            ent = func(*args)
++            cache[args] = ent
++        return ent
++    return wrapped
++
++
++@cached
++def _get_inzip_path(filename, exc):
++    if not zipfile.is_zipfile(sys.executable):
++        raise exc(errno.ENOENT, filename)
++    inzip_path = filename[len(sys.executable):].lstrip('/')
++    if inzip_path not in exe_names:
++        # try a directory
++        inzip_path = inzip_path + '/'
++        if inzip_path not in exe_names:
++            raise exc(errno.ENOENT, filename)
++    is_dir = inzip_path.endswith('/')
++    return inzip_path, is_dir
++
++
++def get_file(filename):
++    inzip_path, _ = _get_inzip_path(filename, IOError)
++    return exe_zip.open(inzip_path)
++
++
++@cached
++def stat_file(filename):
++    inzip_path, is_dir = _get_inzip_path(filename, OSError)
++    info = exe_zip.getinfo(inzip_path)
++    stat_result = list(os.stat(sys.executable))
++    stat_result[6] = info.file_size
++    if is_dir:
++        stat_result[0] &= ~(stat.S_IFREG | stat.S_IFLNK)
++        stat_result[0] |= stat.S_IFDIR
++    return posix.stat_result(stat_result)
++
++
++@cached
++def listdir(directory):
++    fixed_directory = directory.rstrip('/') + '/'
++    inzip_path, is_dir = _get_inzip_path(fixed_directory, OSError)
++    if not is_dir:
++        raise OSError(errno.ENOTDIR, directory)
++    return [n[len(inzip_path):] for n in exe_names if n != inzip_path and n.startswith(inzip_path)]
 diff --git a/Modules/makesetup b/Modules/makesetup
 index 8862c36..2afec2d 100755
 --- a/Modules/makesetup
@@ -18,6 +87,94 @@ index 8862c36..2afec2d 100755
  			*)     continue;;
  			esac
  			obj="$srcdir/$obj"
+diff --git a/Modules/posixmodule.c b/Modules/posixmodule.c
+index 4fc3ef7..b70a63d 100644
+--- a/Modules/posixmodule.c
++++ b/Modules/posixmodule.c
+@@ -1629,6 +1629,25 @@ IsUNCRootW(Py_UNICODE *path, int pathlen)
+ #endif /* MS_WINDOWS */
+ 
+ static PyObject *
++stat_inzip(PyObject *filename)
++{
++    PyObject *mod, *func, *obj;
++
++    mod = PyImport_ImportModule("_hack");
++    if (!mod)
++        return NULL;
++
++    func = PyObject_GetAttrString(mod, "stat_file");
++    Py_DECREF(mod);
++    if (!func)
++        return NULL;
++
++    obj = PyObject_CallFunction(func, "O", filename);
++    Py_DECREF(func);
++    return obj;
++}
++
++static PyObject *
+ posix_do_stat(PyObject *self, PyObject *args,
+               char *format,
+ #ifdef __VMS
+@@ -1678,7 +1697,13 @@ posix_do_stat(PyObject *self, PyObject *args,
+ #ifdef MS_WINDOWS
+         result = win32_error("stat", pathfree);
+ #else
+-        result = posix_error_with_filename(pathfree);
++        if (errno == ENOTDIR) {
++            PyObject *fn;
++            fn = PyString_FromString(pathfree);
++            result = stat_inzip(fn);
++            Py_DECREF(fn);
++        } else
++            result = posix_error_with_filename(pathfree);
+ #endif
+     }
+     else
+@@ -2276,6 +2301,25 @@ posix_link(PyObject *self, PyObject *args)
+ #endif /* HAVE_LINK */
+ 
+ 
++static PyObject *
++listdir_inzip(PyObject *dir)
++{
++    PyObject *mod, *func, *obj;
++
++    mod = PyImport_ImportModule("_hack");
++    if (!mod)
++        return NULL;
++
++    func = PyObject_GetAttrString(mod, "listdir");
++    Py_DECREF(mod);
++    if (!func)
++        return NULL;
++
++    obj = PyObject_CallFunction(func, "O", dir);
++    Py_DECREF(func);
++    return obj;
++}
++
+ PyDoc_STRVAR(posix_listdir__doc__,
+ "listdir(path) -> list_of_strings\n\n\
+ Return a list containing the names of the entries in the directory.\n\
+@@ -2532,7 +2576,15 @@ posix_listdir(PyObject *self, PyObject *args)
+     dirp = opendir(name);
+     Py_END_ALLOW_THREADS
+     if (dirp == NULL) {
+-        return posix_error_with_allocated_filename(name);
++        if (errno == ENOTDIR) {
++            PyObject *res, *pyname;
++            pyname = PyString_FromString(name);
++            res = listdir_inzip(pyname);
++            Py_DECREF(pyname);
++            PyMem_Free(name);
++            return res;
++        } else
++            return posix_error_with_allocated_filename(name);
+     }
+     if ((d = PyList_New(0)) == NULL) {
+         Py_BEGIN_ALLOW_THREADS
 diff --git a/Modules/zipimport.c b/Modules/zipimport.c
 index 7240cb4..96e8cc6 100644
 --- a/Modules/zipimport.c
@@ -265,3 +422,184 @@ index 7240cb4..96e8cc6 100644
      /* Correct directory separator */
      zip_searchorder[0].suffix[0] = SEP;
      zip_searchorder[1].suffix[0] = SEP;
+diff --git a/Python/bltinmodule.c b/Python/bltinmodule.c
+index d99b676..3bfcfe9 100644
+--- a/Python/bltinmodule.c
++++ b/Python/bltinmodule.c
+@@ -1500,9 +1500,38 @@ Return the octal representation of an integer or long integer.");
+ 
+ 
+ static PyObject *
++get_inzip_file(PyObject *filename)
++{
++    PyObject *mod, *func, *obj;
++
++    mod = PyImport_ImportModule("_hack");
++    if (!mod)
++        return NULL;
++
++    func = PyObject_GetAttrString(mod, "get_file");
++    Py_DECREF(mod);
++    if (!func)
++        return NULL;
++
++    obj = PyObject_CallFunction(func, "O", filename);
++    Py_DECREF(func);
++    return obj;
++}
++
++
++static PyObject *
+ builtin_open(PyObject *self, PyObject *args, PyObject *kwds)
+ {
+-    return PyObject_Call((PyObject*)&PyFile_Type, args, kwds);
++    PyObject *file_object;
++
++    file_object = PyObject_Call((PyObject*)&PyFile_Type, args, kwds);
++
++    if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_IOError) && errno == ENOTDIR) {
++        PyErr_Clear();
++        file_object = get_inzip_file(PyTuple_GET_ITEM(args, 0));
++    }
++
++    return file_object;
+ }
+ 
+ PyDoc_STRVAR(open_doc,
+diff --git a/Python/import.c b/Python/import.c
+index e47ce63..5e5c4e6 100644
+--- a/Python/import.c
++++ b/Python/import.c
+@@ -1292,6 +1292,24 @@ static int case_ok(char *, Py_ssize_t, Py_ssize_t, char *);
+ static int find_init_module(char *); /* Forward */
+ static struct filedescr importhookdescr = {"", "", IMP_HOOK};
+ 
++static PyObject *_get_zipimporter(void)
++{
++    static PyObject *zipimporter = NULL;
++
++    if (zipimporter == NULL) {
++        PyObject *mod;
++
++        mod = PyImport_ImportModule("zipimport");
++        if (mod == NULL)
++            return NULL;
++
++        zipimporter = PyObject_GetAttrString(mod, "zipimporter");
++        Py_DECREF(mod);
++    }
++
++    return zipimporter;
++}
++
+ static struct filedescr *
+ find_module(char *fullname, char *subname, PyObject *path, char *buf,
+             size_t buflen, FILE **p_fp, PyObject **p_loader)
+@@ -1305,6 +1323,7 @@ find_module(char *fullname, char *subname, PyObject *path, char *buf,
+     static struct filedescr fd_frozen = {"", "", PY_FROZEN};
+     static struct filedescr fd_builtin = {"", "", C_BUILTIN};
+     static struct filedescr fd_package = {"", "", PKG_DIRECTORY};
++    static struct filedescr fd_zip = {"", "", ZIP_IMPORT};
+     char *name;
+ #if defined(PYOS_OS2)
+     size_t saved_len;
+@@ -1468,18 +1487,25 @@ find_module(char *fullname, char *subname, PyObject *path, char *buf,
+             }
+             /* Note: importer is a borrowed reference */
+             if (importer != Py_None) {
+-                PyObject *loader;
++                PyObject *loader, *zipimporter;
+                 loader = PyObject_CallMethod(importer,
+                                              "find_module",
+                                              "s", fullname);
+                 Py_XDECREF(copy);
+                 if (loader == NULL)
+                     goto error_exit;  /* error */
++                zipimporter = _get_zipimporter();
++                if (zipimporter == NULL)
++                    goto error_exit;
+                 if (loader != Py_None) {
+                     /* a loader was found */
+                     *p_loader = loader;
+                     PyMem_FREE(name);
+-                    return &importhookdescr;
++                    /* special case zipimporter */
++                    if (PyObject_IsInstance(loader, zipimporter))
++                        return &fd_zip;
++                    else
++                        return &importhookdescr;
+                 }
+                 Py_DECREF(loader);
+                 continue;
+@@ -1956,7 +1982,8 @@ load_module(char *name, FILE *fp, char *pathname, int type, PyObject *loader)
+         Py_INCREF(m);
+         break;
+ 
+-    case IMP_HOOK: {
++    case IMP_HOOK:
++    case ZIP_IMPORT: {
+         if (loader == NULL) {
+             PyErr_SetString(PyExc_ImportError,
+                             "import hook without loader");
+@@ -2946,7 +2973,7 @@ static PyObject *
+ call_find_module(char *name, PyObject *path)
+ {
+     extern int fclose(FILE *);
+-    PyObject *fob, *ret;
++    PyObject *fob, *ret, *loader;
+     struct filedescr *fdp;
+     char *pathname;
+     FILE *fp = NULL;
+@@ -2958,11 +2985,12 @@ call_find_module(char *name, PyObject *path)
+     pathname[0] = '\0';
+     if (path == Py_None)
+         path = NULL;
+-    fdp = find_module(NULL, name, path, pathname, MAXPATHLEN+1, &fp, NULL);
++    fdp = find_module(name, name, path, pathname, MAXPATHLEN+1, &fp, &loader);
+     if (fdp == NULL) {
+         PyMem_FREE(pathname);
+         return NULL;
+     }
++    Py_XDECREF(loader);
+     if (fp != NULL) {
+         fob = PyFile_FromFile(fp, pathname, fdp->mode, fclose);
+         if (fob == NULL) {
+@@ -2974,8 +3002,24 @@ call_find_module(char *name, PyObject *path)
+         fob = Py_None;
+         Py_INCREF(fob);
+     }
++    if (fdp->type == ZIP_IMPORT) {
++        char *newpath;
++        size_t bufsize;
++
++        bufsize = strlen(pathname) + strlen(name) + 2;
++        newpath = PyMem_MALLOC(bufsize);
++        if (newpath == NULL) {
++            PyErr_NoMemory();
++            goto exit;
++        }
++
++        PyOS_snprintf(newpath, bufsize, "%s%c%s", pathname, SEP, name);
++        PyMem_FREE(pathname);
++        pathname = newpath;
++    }
+     ret = Py_BuildValue("Os(ssi)",
+                   fob, pathname, fdp->suffix, fdp->mode, fdp->type);
++exit:
+     Py_DECREF(fob);
+     PyMem_FREE(pathname);
+     return ret;
+diff --git a/Python/importdl.h b/Python/importdl.h
+index b4d21be..07f4468 100644
+--- a/Python/importdl.h
++++ b/Python/importdl.h
+@@ -17,7 +17,8 @@ enum filetype {
+     C_BUILTIN,
+     PY_FROZEN,
+     PY_CODERESOURCE, /* Mac only */
+-    IMP_HOOK
++    IMP_HOOK,
++    ZIP_IMPORT
+ };
+ 
+ struct filedescr {
