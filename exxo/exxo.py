@@ -75,7 +75,10 @@ def create_virtualenv(args):
 
 def get_project_name(source_path):
     out = subprocess.check_output(['python', 'setup.py', '--name'], cwd=source_path)
-    return out.decode().strip()
+    lines = out.decode().splitlines()
+    if not lines:
+        sys.exit('failed to get project name from setup.py (python setup.py --name): empty output')
+    return lines[-1]
 
 
 def get_entry_point(source_path, project_name=None):
