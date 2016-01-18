@@ -83,6 +83,34 @@ binary and save some space.
 
 .. _exxo git repository: https://github.com/mbachry/exxo/
 
+Differences with similar projects
+---------------------------------
+
+There's already a significant competition for exxo, including
+prominent projects like `pex`_ or `PyInstaller`_. Here are few things
+I'd like to see exxo doing differently:
+
+* single binary
+
+* the binary should be almost 100% standalone (i.e. Python doesn't
+  have to be preinstalled)
+
+* good startup performance so that exxo can be used for small, short
+  lived apps (this means not unpacking everything to temporary
+  locations)
+
+* user-friendliness: should stick to familiar solutions like virtualenv
+  or setuptools
+
+* should support at least most popular packages out of the box without
+  manual tweaks at user side
+
+* investment in zipapps - even if they need special attention today,
+  they are the cleanest and most modern way of bundling Python apps
+
+.. _pex: https://pex.readthedocs.org/en/stable/
+.. _PyInstaller: http://www.pyinstaller.org/
+
 Caveats
 -------
 
