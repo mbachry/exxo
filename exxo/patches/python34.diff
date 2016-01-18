@@ -1,3 +1,247 @@
+diff --git a/Lib/_exxo_hack.py b/Lib/_exxo_hack.py
+new file mode 100644
+index 0000000..b8f294a
+--- /dev/null
++++ b/Lib/_exxo_hack.py
+@@ -0,0 +1,63 @@
++import sys
++import os
++import posix
++import stat
++import zipfile
++import errno
++
++
++if zipfile.is_zipfile(sys.executable):
++    exe_zip = zipfile.ZipFile(sys.executable, 'r')
++    exe_names = exe_zip.namelist()
++zip_cache = {}
++
++
++def cached(func):
++    cache = zip_cache.setdefault(func, {})
++    def wrapped(*args):
++        ent = cache.get(args)
++        if ent is None:
++            ent = func(*args)
++            cache[args] = ent
++        return ent
++    return wrapped
++
++
++@cached
++def _get_inzip_path(filename, exc):
++    if not zipfile.is_zipfile(sys.executable):
++        raise exc(errno.ENOENT, filename)
++    inzip_path = filename[len(sys.executable):].lstrip('/')
++    if inzip_path not in exe_names:
++        # try a directory
++        inzip_path = inzip_path + '/'
++        if inzip_path not in exe_names:
++            raise exc(errno.ENOENT, filename)
++    is_dir = inzip_path.endswith('/')
++    return inzip_path, is_dir
++
++
++def get_file(filename):
++    inzip_path, _ = _get_inzip_path(filename, IOError)
++    return exe_zip.open(inzip_path)
++
++
++@cached
++def stat_file(filename):
++    inzip_path, is_dir = _get_inzip_path(filename, OSError)
++    info = exe_zip.getinfo(inzip_path)
++    stat_result = list(os.stat(sys.executable))
++    stat_result[6] = info.file_size
++    if is_dir:
++        stat_result[0] &= ~(stat.S_IFREG | stat.S_IFLNK)
++        stat_result[0] |= stat.S_IFDIR
++    return posix.stat_result(stat_result)
++
++
++@cached
++def listdir(directory):
++    fixed_directory = directory.rstrip('/') + '/'
++    inzip_path, is_dir = _get_inzip_path(fixed_directory, OSError)
++    if not is_dir:
++        raise OSError(errno.ENOTDIR, directory)
++    return [n[len(inzip_path):] for n in exe_names if n != inzip_path and n.startswith(inzip_path)]
+diff --git a/Lib/ctypes/__init__.py b/Lib/ctypes/__init__.py
+index 5c803ff..f18d575 100644
+--- a/Lib/ctypes/__init__.py
++++ b/Lib/ctypes/__init__.py
+@@ -315,6 +315,29 @@ def ARRAY(typ, len):
+ ################################################################
+ 
+ 
++def _dlopen_from_zip(name, mode):
++    import tempfile
++    import shutil
++    # TODO: linux only
++    with open(name, 'rb') as srcfp:
++        fd, tmpname = tempfile.mkstemp('.so')
++        try:
++            with _os.fdopen(fd, 'wb') as dstfp:
++                shutil.copyfileobj(srcfp, dstfp)
++            return _dlopen(tmpname, mode)
++        finally:
++            try:
++                _os.unlink(tmpname)
++            except OSError:
++                pass
++
++def dlopen_from_zip(name, mode):
++    try:
++        return _dlopen_from_zip(name, mode)
++    except (OSError, IOError):
++        return
++
++
+ class CDLL(object):
+     """An instance of this class represents a loaded dll/shared
+     library, exporting functions using the standard C calling
+@@ -348,7 +371,13 @@ class CDLL(object):
+         self._FuncPtr = _FuncPtr
+ 
+         if handle is None:
+-            self._handle = _dlopen(self._name, mode)
++            try:
++                self._handle = _dlopen(self._name, mode)
++            except OSError:
++                handle = dlopen_from_zip(self._name, mode)
++                if handle is None:
++                    raise
++                self._handle = handle
+         else:
+             self._handle = handle
+ 
+diff --git a/Lib/imp.py b/Lib/imp.py
+index c922e92..3d9d4f8 100644
+--- a/Lib/imp.py
++++ b/Lib/imp.py
+@@ -26,6 +26,7 @@ import sys
+ import tokenize
+ import types
+ import warnings
++from zipimport import zipimporter
+ 
+ warnings.warn("the imp module is deprecated in favour of importlib; "
+               "see the module's documentation for alternative uses",
+@@ -279,6 +280,18 @@ def find_module(name, path=None):
+             path = sys.path
+ 
+     for entry in path:
++        for meta in sys.path_hooks:
++            if meta is not zipimporter:
++                continue
++            try:
++                loader = meta(entry)
++            except ImportError:
++                continue
++            print (loader, name, entry, loader.find_module(name))
++            if loader.find_module(name) is None:
++                continue
++            newpath = os.path.join(entry, name)
++            return None, newpath, ()
+         package_directory = os.path.join(entry, name)
+         for suffix in ['.py', machinery.BYTECODE_SUFFIXES[0]]:
+             package_file_name = '__init__' + suffix
+diff --git a/Lib/inspect.py b/Lib/inspect.py
+index 4298de6..9b9e34d 100644
+--- a/Lib/inspect.py
++++ b/Lib/inspect.py
+@@ -585,6 +585,9 @@ def getsourcefile(object):
+     # or it is in the linecache
+     if filename in linecache.cache:
+         return filename
++    # a workaround for packages like django debug toolbar
++    if filename.startswith('<pyrun>'):
++        return filename
+ 
+ def getabsfile(object, _filename=None):
+     """Return an absolute path to the source or compiled file for an object.
+diff --git a/Lib/subprocess.py b/Lib/subprocess.py
+index 04cfb44..2b93447 100644
+--- a/Lib/subprocess.py
++++ b/Lib/subprocess.py
+@@ -1332,6 +1332,21 @@ class Popen(object):
+             if start_fd <= MAXFD:
+                 os.closerange(start_fd, MAXFD)
+ 
++        def __get_executable_from_zip(self, name):
++            import tempfile
++            import shutil
++            with open(name, 'rb') as srcfp:
++                fd, tmpname = tempfile.mkstemp()
++                with os.fdopen(fd, 'wb') as dstfp:
++                    shutil.copyfileobj(srcfp, dstfp)
++                os.chmod(tmpname, 0o700)
++                return tmpname
++
++        def _get_executable_from_zip(self, name):
++            try:
++                return self.__get_executable_from_zip(name)
++            except (OSError, IOError):
++                return
+ 
+         def _execute_child(self, args, executable, preexec_fn, close_fds,
+                            pass_fds, cwd, env,
+@@ -1340,6 +1355,54 @@ class Popen(object):
+                            c2pread, c2pwrite,
+                            errread, errwrite,
+                            restore_signals, start_new_session):
++            # TODO: massive hack here: if cwd points inside zip, clear
++            # it. may be a very unexpected behaviour
++            if cwd is not None and cwd.startswith(sys.executable):
++                cwd = None
++            try:
++                self.__execute_child(args, executable, preexec_fn, close_fds,
++                                     pass_fds, cwd, env,
++                                     startupinfo, creationflags, shell,
++                                     p2cread, p2cwrite,
++                                     c2pread, c2pwrite,
++                                     errread, errwrite,
++                                     restore_signals, start_new_session)
++            except OSError as e:
++                if e.errno != os.errno.ENOTDIR:
++                    raise
++                exe = executable
++                if exe is None:
++                    if isinstance(args, str):
++                        raise
++                    exe = args[0]
++                exe = self._get_executable_from_zip(exe)
++                if exe is None:
++                    raise
++                if executable is not None:
++                    executable = exe
++                args = list(args)
++                args[0] = exe
++                try:
++                    self.__execute_child(args, executable, preexec_fn, close_fds,
++                                         pass_fds, cwd, env,
++                                         startupinfo, creationflags, shell,
++                                         p2cread, p2cwrite,
++                                         c2pread, c2pwrite,
++                                         errread, errwrite,
++                                         restore_signals, start_new_session)
++                finally:
++                    try:
++                        os.unlink(exe)
++                    except OSError:
++                        pass
++
++        def __execute_child(self, args, executable, preexec_fn, close_fds,
++                            pass_fds, cwd, env,
++                            startupinfo, creationflags, shell,
++                            p2cread, p2cwrite,
++                            c2pread, c2pwrite,
++                            errread, errwrite,
++                            restore_signals, start_new_session):
+             """Execute program (POSIX version)"""
+ 
+             if isinstance(args, (str, bytes)):
 diff --git a/Makefile.pre.in b/Makefile.pre.in
 index e19fc00..4d372e9 100644
 --- a/Makefile.pre.in
@@ -14,6 +258,48 @@ index e19fc00..4d372e9 100644
  	fi
  	-rm -f $(DESTDIR)$(BINDIR)/python3-config
  	(cd $(DESTDIR)$(BINDIR); $(LN) -s python$(VERSION)-config python3-config)
+diff --git a/Modules/_io/_iomodule.c b/Modules/_io/_iomodule.c
+index 44116d8..31cb666 100644
+--- a/Modules/_io/_iomodule.c
++++ b/Modules/_io/_iomodule.c
+@@ -218,6 +218,25 @@ PyDoc_STRVAR(open_doc,
+     );
+ 
+ static PyObject *
++get_inzip_file(PyObject *filename)
++{
++    PyObject *mod, *func, *obj;
++
++    mod = PyImport_ImportModule("_exxo_hack");
++    if (!mod)
++        return NULL;
++
++    func = PyObject_GetAttrString(mod, "get_file");
++    Py_DECREF(mod);
++    if (!func)
++        return NULL;
++
++    obj = PyObject_CallFunction(func, "O", filename);
++    Py_DECREF(func);
++    return obj;
++}
++
++static PyObject *
+ io_open(PyObject *self, PyObject *args, PyObject *kwds)
+ {
+     char *kwlist[] = {"file", "mode", "buffering",
+@@ -353,6 +372,11 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
+     /* Create the Raw file stream */
+     raw = PyObject_CallFunction((PyObject *)&PyFileIO_Type,
+                                 "OsiO", file, rawmode, closefd, opener);
++    if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_OSError) && errno == ENOTDIR) {
++        PyErr_Clear();
++        raw = get_inzip_file(file);
++        buffering = 65536;
++    }
+     if (raw == NULL)
+         return NULL;
+     result = raw;
 diff --git a/Modules/makesetup b/Modules/makesetup
 index 8b5cc28..8666e5c 100755
 --- a/Modules/makesetup
@@ -34,8 +320,87 @@ index 8b5cc28..8666e5c 100755
  			*)     continue;;
  			esac
  			obj="$srcdir/$obj"
+diff --git a/Modules/posixmodule.c b/Modules/posixmodule.c
+index 7c937e0..4c432ce 100644
+--- a/Modules/posixmodule.c
++++ b/Modules/posixmodule.c
+@@ -2333,6 +2333,24 @@ _pystat_fromstructstat(STRUCT_STAT *st)
+ 
+ /* POSIX methods */
+ 
++static PyObject *
++stat_inzip(PyObject *filename)
++{
++    PyObject *mod, *func, *obj;
++
++    mod = PyImport_ImportModule("_exxo_hack");
++    if (!mod)
++        return NULL;
++
++    func = PyObject_GetAttrString(mod, "stat_file");
++    Py_DECREF(mod);
++    if (!func)
++        return NULL;
++
++    obj = PyObject_CallFunction(func, "O", filename);
++    Py_DECREF(func);
++    return obj;
++}
+ 
+ static PyObject *
+ posix_do_stat(char *function_name, path_t *path,
+@@ -2379,7 +2397,10 @@ posix_do_stat(char *function_name, path_t *path,
+     Py_END_ALLOW_THREADS
+ 
+     if (result != 0) {
+-        return path_error(path);
++        if (errno == ENOTDIR)
++            return stat_inzip(path->object);
++        else
++            return path_error(path);
+     }
+ 
+     return _pystat_fromstructstat(&st);
+@@ -3611,6 +3632,25 @@ exit:
+ 
+ 
+ 
++static PyObject *
++listdir_inzip(PyObject *dir)
++{
++    PyObject *mod, *func, *obj;
++
++    mod = PyImport_ImportModule("_exxo_hack");
++    if (!mod)
++        return NULL;
++
++    func = PyObject_GetAttrString(mod, "listdir");
++    Py_DECREF(mod);
++    if (!func)
++        return NULL;
++
++    obj = PyObject_CallFunction(func, "O", dir);
++    Py_DECREF(func);
++    return obj;
++}
++
+ PyDoc_STRVAR(posix_listdir__doc__,
+ "listdir(path='.') -> list_of_filenames\n\n\
+ Return a list containing the names of the files in the directory.\n\
+@@ -3825,7 +3865,10 @@ _posix_listdir(path_t *path, PyObject *list)
+     }
+ 
+     if (dirp == NULL) {
+-        list = path_error(path);
++        if (errno == ENOTDIR)
++            list = listdir_inzip(path->object);
++        else
++            list = path_error(path);
+ #ifdef HAVE_FDOPENDIR
+         if (fd != -1) {
+             Py_BEGIN_ALLOW_THREADS
 diff --git a/Modules/zipimport.c b/Modules/zipimport.c
-index f2cc245..f219e75 100644
+index f2cc245..76219a1 100644
 --- a/Modules/zipimport.c
 +++ b/Modules/zipimport.c
 @@ -3,14 +3,16 @@
@@ -56,7 +421,7 @@ index f2cc245..f219e75 100644
      int type;
  };
  
-@@ -23,15 +25,20 @@ _Py_IDENTIFIER(replace);
+@@ -23,15 +25,21 @@ _Py_IDENTIFIER(replace);
     non-package .pyc, .pyo and .py entries. The .pyc and .pyo entries
     are swapped by initzipimport() if we run in optimized mode. Also,
     '/' is replaced by SEP there. */
@@ -69,6 +434,7 @@ index f2cc245..f219e75 100644
 +    /* these two will be filled later in init_search_order() */
 +    {"", IS_PACKAGE | IS_BYTECODE},
 +    {"", IS_PACKAGE | IS_BYTECODE},
++    {"", IS_PACKAGE | IS_SOURCE},
      {".pyc", IS_BYTECODE},
 -    {".pyo", IS_BYTECODE},
 -    {".py", IS_SOURCE},
@@ -84,7 +450,7 @@ index f2cc245..f219e75 100644
  
  /* zipimporter object definition and support */
  
-@@ -55,6 +62,7 @@ static PyObject *read_directory(PyObject *archive);
+@@ -55,6 +63,7 @@ static PyObject *read_directory(PyObject *archive);
  static PyObject *get_data(PyObject *archive, PyObject *toc_entry);
  static PyObject *get_module_code(ZipImporter *self, PyObject *fullname,
                                   int *p_ispackage, PyObject **p_modpath);
@@ -92,7 +458,7 @@ index f2cc245..f219e75 100644
  
  
  #define ZipImporter_Check(op) PyObject_TypeCheck(op, &ZipImporter_Type)
-@@ -289,20 +297,50 @@ check_is_directory(ZipImporter *self, PyObject* prefix, PyObject *path)
+@@ -289,20 +298,50 @@ check_is_directory(ZipImporter *self, PyObject* prefix, PyObject *path)
      return res;
  }
  
@@ -151,7 +517,7 @@ index f2cc245..f219e75 100644
      if (path == NULL)
          return MI_ERROR;
  
-@@ -312,6 +350,7 @@ get_module_info(ZipImporter *self, PyObject *fullname)
+@@ -312,6 +351,7 @@ get_module_info(ZipImporter *self, PyObject *fullname)
              Py_DECREF(path);
              return MI_ERROR;
          }
@@ -159,7 +525,7 @@ index f2cc245..f219e75 100644
          item = PyDict_GetItem(self->files, fullpath);
          Py_DECREF(fullpath);
          if (item != NULL) {
-@@ -322,10 +361,30 @@ get_module_info(ZipImporter *self, PyObject *fullname)
+@@ -322,10 +362,30 @@ get_module_info(ZipImporter *self, PyObject *fullname)
                  return MI_MODULE;
          }
      }
@@ -190,7 +556,7 @@ index f2cc245..f219e75 100644
  typedef enum {
      FL_ERROR,
      FL_NOT_FOUND,
-@@ -440,6 +499,91 @@ zipimporter_find_loader(PyObject *obj, PyObject *args)
+@@ -440,6 +500,91 @@ zipimporter_find_loader(PyObject *obj, PyObject *args)
      return result;
  }
  
@@ -282,7 +648,7 @@ index f2cc245..f219e75 100644
  /* Load and return the module named by 'fullname'. */
  static PyObject *
  zipimporter_load_module(PyObject *obj, PyObject *args)
-@@ -456,6 +600,14 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
+@@ -456,6 +601,14 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
      if (PyUnicode_READY(fullname) == -1)
          return NULL;
  
@@ -297,7 +663,7 @@ index f2cc245..f219e75 100644
      code = get_module_code(self, fullname, &ispackage, &modpath);
      if (code == NULL)
          goto error;
-@@ -1369,6 +1521,40 @@ get_code_from_data(ZipImporter *self, int ispackage, int isbytecode,
+@@ -1369,6 +1522,40 @@ get_code_from_data(ZipImporter *self, int ispackage, int isbytecode,
      return code;
  }
  
@@ -338,7 +704,7 @@ index f2cc245..f219e75 100644
  /* Get the code object associated with the module specified by
     'fullname'. */
  static PyObject *
-@@ -1378,11 +1564,25 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1378,11 +1565,25 @@ get_module_code(ZipImporter *self, PyObject *fullname,
      PyObject *code = NULL, *toc_entry, *subname;
      PyObject *path, *fullpath = NULL;
      struct st_zip_searchorder *zso;
@@ -364,7 +730,7 @@ index f2cc245..f219e75 100644
      path = make_filename(self->prefix, subname);
      Py_DECREF(subname);
      if (path == NULL)
-@@ -1400,7 +1600,6 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1400,7 +1601,6 @@ get_module_code(ZipImporter *self, PyObject *fullname,
                                 self->archive, (int)SEP, fullpath);
          toc_entry = PyDict_GetItem(self->files, fullpath);
          if (toc_entry != NULL) {
@@ -372,7 +738,7 @@ index f2cc245..f219e75 100644
              int ispackage = zso->type & IS_PACKAGE;
              int isbytecode = zso->type & IS_BYTECODE;
  
-@@ -1413,6 +1612,17 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1413,6 +1613,17 @@ get_module_code(ZipImporter *self, PyObject *fullname,
              Py_CLEAR(fullpath);
              if (p_ispackage != NULL)
                  *p_ispackage = ispackage;
@@ -390,7 +756,7 @@ index f2cc245..f219e75 100644
              code = get_code_from_data(self, ispackage,
                                        isbytecode, mtime,
                                        toc_entry);
-@@ -1422,10 +1632,8 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1422,10 +1633,8 @@ get_module_code(ZipImporter *self, PyObject *fullname,
                  Py_DECREF(code);
                  continue;
              }
@@ -403,7 +769,7 @@ index f2cc245..f219e75 100644
              goto exit;
          }
          else
-@@ -1467,6 +1675,54 @@ static struct PyModuleDef zipimportmodule = {
+@@ -1467,6 +1676,56 @@ static struct PyModuleDef zipimportmodule = {
      NULL
  };
  
@@ -425,9 +791,11 @@ index f2cc245..f219e75 100644
 +             "%c__pycache__%c__init__.%s.pyc", SEP, SEP, _PySys_ImplCacheTag);
 +    snprintf(zip_searchorder_base[1].suffix, sizeof(zip_searchorder_base[1].suffix),
 +             "%c__pycache__%c__init__.%s.pyo", SEP, SEP, _PySys_ImplCacheTag);
++    snprintf(zip_searchorder_base[2].suffix, sizeof(zip_searchorder_base[0].suffix),
++             "%c__init__.py", SEP);
 +
 +    /* Correct directory separator */
-+    zip_searchorder_base[2].suffix[0] = SEP;
++    zip_searchorder_base[3].suffix[0] = SEP;
 +
 +    zip_searchorder = PyMem_Malloc(sizeof(struct st_zip_searchorder) *
 +                                   (zip_searchorder_base_len + get_dynload_file_tab_len() + 1));
@@ -458,7 +826,7 @@ index f2cc245..f219e75 100644
  PyMODINIT_FUNC
  PyInit_zipimport(void)
  {
-@@ -1475,20 +1731,8 @@ PyInit_zipimport(void)
+@@ -1475,20 +1734,8 @@ PyInit_zipimport(void)
      if (PyType_Ready(&ZipImporter_Type) < 0)
          return NULL;
  
