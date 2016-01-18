@@ -35,15 +35,24 @@ the following ways:
   ncurses) are statically compiled in (again, it makes PyRun Linux
   only)
 
+* few I/O functions in CPython are patched to make most zip unsafe
+  packages work out of the box (read `Zip safety hacks`_ section
+  below)
+
 .. _PyRun: https://www.egenix.com/products/python/PyRun/
 .. _zipapp: https://docs.python.org/3/library/zipapp.html
 
-Quick start
------------
+Download
+--------
 
 Exxo is self-hosting. You can download it `here`_. The archive
 contains just one file: exxo binary you should put somewhere in your
 ``PATH``.
+
+.. _here: https://bintray.com/artifact/download/mbachry/exxo/exxo-0.0.4.tar.xz
+
+Quick start
+-----------
 
 Your package needs to have a working ``setup.py`` script. We'll use a
 sample project from ``example`` directory in `exxo git
@@ -72,7 +81,6 @@ If you have upx installed (``apt-get install upx`` or ``dnf install
 upx``) you can use ``-c`` flag (``exxo build -c``) to compress PyRun
 binary and save some space.
 
-.. _here: https://bintray.com/artifact/download/mbachry/exxo/exxo-0.0.4.tar.xz
 .. _exxo git repository: https://github.com/mbachry/exxo/
 
 Caveats
@@ -87,14 +95,15 @@ Also, exxo still links dynamically glibc for practical reasons
 (nsswitch support, etc.). Although glibc uses ELF symbol versioning,
 you shouldn't build your project on a machine with much newer version
 of glibc than installed on destination server. Exxo release itself is
-built on Ubuntu 10.04 to make sure it runs on every distro, including
-Centos 6.
+built on Ubuntu 10.04 (with openssl 1.0+) to make sure it runs on
+every distro, including Centos 6.
 
-Because your application is run as zipapp, it must be zip safe. This
-applies to all dependencies too, with Django being main offender,
-unfortunately (but see `example/myip/myip.py`_ for tips how to use
-Flask). The main violation against zip safety is using filesystem API
-to read data files from inside your package. Don't do this::
+Because your application is run as zipapp, it should be zip safe. This
+applies to all dependencies too, although exxo is armed in few hacks
+to make many third-party packages run out of the box (see `Zip safety
+hacks`_ section below). The main violation against zip safety is using
+filesystem API to read data files from inside your package. Don't do
+this::
 
     open(os.path.join(os.path.dirname(__file__), 'index.html'))
 
@@ -109,9 +118,55 @@ Note that your ``setup.py`` must have one (and exactly one)
 ``console_scripts`` entry point defined for ``exxo build`` to work
 correctly.
 
+Although exxo tries hard to load everything directly from an
+executable, some resources still have to be unzipped to a temporary
+directory due to OS limitations. This applies mostly to bundled
+binaries (C extensions, shared libraries for ``ctypes``, ELF
+binaries), as it's nearly impossible to ``dlopen`` directly from a
+zip. One serious limitation coming from this behaviour is that an exxo
+binary won't work, if your ``/tmp`` directory happens to be mounted with
+``-o noexec``.
+
 .. _pkgutil: https://docs.python.org/3/library/pkgutil.html
 .. _pkg_resources: https://pythonhosted.org/setuptools/pkg_resources.html
 .. _example/myip/myip.py: https://github.com/mbachry/exxo/blob/master/example/myip/myip.py
+
+Zip safety hacks
+----------------
+
+Exxo implements few patches over CPython to improve zip compatibility
+out of the box.
+
+Many popular Python packages are zip unsafe (including
+Django). Luckily most of zip unsafe code follows the same pattern of
+loading bundled resources mentioned in previous section::
+
+    open(os.path.join(os.path.dirname(__file__), 'templates', 'index.html'))
+
+If loaded from an unpatched exxo binary, it will fail with an
+exception like::
+
+    NotADirectoryError: [Errno 20] Not a directory: '/usr/bin/djangoapp/app/templates/index.html'
+
+The erroneous path is clearly built from two parts: a path to exxo
+binary (``/usr/bin/djangoapp``) and a path inside zip
+(``app/templates/index.html``). Exxo patches several standard I/O
+functions inside CPython to detect the above pattern and return an
+object from zip instead of an error. This simple hack vastly improves
+zip compatibility - to the point it's possible to build Django apps
+out of the box.
+
+Here's a list of functions and modules patched so far:
+
+* ``open``
+
+* ``os.stat``
+
+* ``os.listdir``
+
+* ``ctypes`` (requires unpacking to temporary location)
+
+* ``subprocess`` (requires unpacking to temporary location)
 
 Building exxo from sources
 --------------------------
