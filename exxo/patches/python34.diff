@@ -67,6 +67,55 @@ index 0000000..b8f294a
 +    if not is_dir:
 +        raise OSError(errno.ENOTDIR, directory)
 +    return [n[len(inzip_path):] for n in exe_names if n != inzip_path and n.startswith(inzip_path)]
+diff --git a/Lib/ctypes/__init__.py b/Lib/ctypes/__init__.py
+index 5c803ff..f18d575 100644
+--- a/Lib/ctypes/__init__.py
++++ b/Lib/ctypes/__init__.py
+@@ -315,6 +315,29 @@ def ARRAY(typ, len):
+ ################################################################
+ 
+ 
++def _dlopen_from_zip(name, mode):
++    import tempfile
++    import shutil
++    # TODO: linux only
++    with open(name, 'rb') as srcfp:
++        fd, tmpname = tempfile.mkstemp('.so')
++        try:
++            with _os.fdopen(fd, 'wb') as dstfp:
++                shutil.copyfileobj(srcfp, dstfp)
++            return _dlopen(tmpname, mode)
++        finally:
++            try:
++                _os.unlink(tmpname)
++            except OSError:
++                pass
++
++def dlopen_from_zip(name, mode):
++    try:
++        return _dlopen_from_zip(name, mode)
++    except (OSError, IOError):
++        return
++
++
+ class CDLL(object):
+     """An instance of this class represents a loaded dll/shared
+     library, exporting functions using the standard C calling
+@@ -348,7 +371,13 @@ class CDLL(object):
+         self._FuncPtr = _FuncPtr
+ 
+         if handle is None:
+-            self._handle = _dlopen(self._name, mode)
++            try:
++                self._handle = _dlopen(self._name, mode)
++            except OSError:
++                handle = dlopen_from_zip(self._name, mode)
++                if handle is None:
++                    raise
++                self._handle = handle
+         else:
+             self._handle = handle
+ 
 diff --git a/Lib/imp.py b/Lib/imp.py
 index c922e92..3d9d4f8 100644
 --- a/Lib/imp.py
@@ -112,6 +161,87 @@ index 4298de6..9b9e34d 100644
  
  def getabsfile(object, _filename=None):
      """Return an absolute path to the source or compiled file for an object.
+diff --git a/Lib/subprocess.py b/Lib/subprocess.py
+index 04cfb44..2b93447 100644
+--- a/Lib/subprocess.py
++++ b/Lib/subprocess.py
+@@ -1332,6 +1332,21 @@ class Popen(object):
+             if start_fd <= MAXFD:
+                 os.closerange(start_fd, MAXFD)
+ 
++        def __get_executable_from_zip(self, name):
++            import tempfile
++            import shutil
++            with open(name, 'rb') as srcfp:
++                fd, tmpname = tempfile.mkstemp()
++                with os.fdopen(fd, 'wb') as dstfp:
++                    shutil.copyfileobj(srcfp, dstfp)
++                os.chmod(tmpname, 0o700)
++                return tmpname
++
++        def _get_executable_from_zip(self, name):
++            try:
++                return self.__get_executable_from_zip(name)
++            except (OSError, IOError):
++                return
+ 
+         def _execute_child(self, args, executable, preexec_fn, close_fds,
+                            pass_fds, cwd, env,
+@@ -1340,6 +1355,54 @@ class Popen(object):
+                            c2pread, c2pwrite,
+                            errread, errwrite,
+                            restore_signals, start_new_session):
++            # TODO: massive hack here: if cwd points inside zip, clear
++            # it. may be a very unexpected behaviour
++            if cwd is not None and cwd.startswith(sys.executable):
++                cwd = None
++            try:
++                self.__execute_child(args, executable, preexec_fn, close_fds,
++                                     pass_fds, cwd, env,
++                                     startupinfo, creationflags, shell,
++                                     p2cread, p2cwrite,
++                                     c2pread, c2pwrite,
++                                     errread, errwrite,
++                                     restore_signals, start_new_session)
++            except OSError as e:
++                if e.errno != os.errno.ENOTDIR:
++                    raise
++                exe = executable
++                if exe is None:
++                    if isinstance(args, str):
++                        raise
++                    exe = args[0]
++                exe = self._get_executable_from_zip(exe)
++                if exe is None:
++                    raise
++                if executable is not None:
++                    executable = exe
++                args = list(args)
++                args[0] = exe
++                try:
++                    self.__execute_child(args, executable, preexec_fn, close_fds,
++                                         pass_fds, cwd, env,
++                                         startupinfo, creationflags, shell,
++                                         p2cread, p2cwrite,
++                                         c2pread, c2pwrite,
++                                         errread, errwrite,
++                                         restore_signals, start_new_session)
++                finally:
++                    try:
++                        os.unlink(exe)
++                    except OSError:
++                        pass
++
++        def __execute_child(self, args, executable, preexec_fn, close_fds,
++                            pass_fds, cwd, env,
++                            startupinfo, creationflags, shell,
++                            p2cread, p2cwrite,
++                            c2pread, c2pwrite,
++                            errread, errwrite,
++                            restore_signals, start_new_session):
+             """Execute program (POSIX version)"""
+ 
+             if isinstance(args, (str, bytes)):
 diff --git a/Makefile.pre.in b/Makefile.pre.in
 index e19fc00..4d372e9 100644
 --- a/Makefile.pre.in

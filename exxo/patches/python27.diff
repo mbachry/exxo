@@ -1,8 +1,8 @@
-diff --git a/Lib/_hack.py b/Lib/_hack.py
+diff --git a/Lib/_exxo_hack.py b/Lib/_exxo_hack.py
 new file mode 100644
 index 0000000..b8f294a
 --- /dev/null
-+++ b/Lib/_hack.py
++++ b/Lib/_exxo_hack.py
 @@ -0,0 +1,63 @@
 +import sys
 +import os
@@ -67,6 +67,55 @@ index 0000000..b8f294a
 +    if not is_dir:
 +        raise OSError(errno.ENOTDIR, directory)
 +    return [n[len(inzip_path):] for n in exe_names if n != inzip_path and n.startswith(inzip_path)]
+diff --git a/Lib/ctypes/__init__.py b/Lib/ctypes/__init__.py
+index 4e97c15..1ccf2ea 100644
+--- a/Lib/ctypes/__init__.py
++++ b/Lib/ctypes/__init__.py
+@@ -329,6 +329,29 @@ def ARRAY(typ, len):
+ ################################################################
+ 
+ 
++def _dlopen_from_zip(name, mode):
++    import tempfile
++    import shutil
++    # TODO: linux only
++    with open(name, 'rb') as srcfp:
++        fd, tmpname = tempfile.mkstemp('.so')
++        try:
++            with _os.fdopen(fd, 'wb') as dstfp:
++                shutil.copyfileobj(srcfp, dstfp)
++            return _dlopen(tmpname, mode)
++        finally:
++            try:
++                _os.unlink(tmpname)
++            except OSError:
++                pass
++
++def dlopen_from_zip(name, mode):
++    try:
++        return _dlopen_from_zip(name, mode)
++    except (OSError, IOError):
++        return
++
++
+ class CDLL(object):
+     """An instance of this class represents a loaded dll/shared
+     library, exporting functions using the standard C calling
+@@ -362,7 +385,13 @@ class CDLL(object):
+         self._FuncPtr = _FuncPtr
+ 
+         if handle is None:
+-            self._handle = _dlopen(self._name, mode)
++            try:
++                self._handle = _dlopen(self._name, mode)
++            except OSError:
++                handle = dlopen_from_zip(self._name, mode)
++                if handle is None:
++                    raise
++                self._handle = handle
+         else:
+             self._handle = handle
+ 
 diff --git a/Lib/inspect.py b/Lib/inspect.py
 index b08e145..271eff9 100644
 --- a/Lib/inspect.py
@@ -81,6 +130,84 @@ index b08e145..271eff9 100644
  
  def getabsfile(object, _filename=None):
      """Return an absolute path to the source or compiled file for an object.
+diff --git a/Lib/subprocess.py b/Lib/subprocess.py
+index f9e9104..e213e70 100644
+--- a/Lib/subprocess.py
++++ b/Lib/subprocess.py
+@@ -1191,6 +1191,21 @@ class Popen(object):
+                     except:
+                         pass
+ 
++        def __get_executable_from_zip(self, name):
++            import tempfile
++            import shutil
++            with open(name, 'rb') as srcfp:
++                fd, tmpname = tempfile.mkstemp()
++                with os.fdopen(fd, 'wb') as dstfp:
++                    shutil.copyfileobj(srcfp, dstfp)
++                os.chmod(tmpname, 0o700)
++                return tmpname
++
++        def _get_executable_from_zip(self, name):
++            try:
++                return self.__get_executable_from_zip(name)
++            except (OSError, IOError):
++                return
+ 
+         def _execute_child(self, args, executable, preexec_fn, close_fds,
+                            cwd, env, universal_newlines,
+@@ -1198,6 +1213,51 @@ class Popen(object):
+                            p2cread, p2cwrite,
+                            c2pread, c2pwrite,
+                            errread, errwrite):
++            # TODO: massive hack here: if cwd points inside zip, clear
++            # it. may be a very unexpected behaviour
++            if cwd is not None and cwd.startswith(sys.executable):
++                cwd = None
++            try:
++                self.__execute_child(args, executable, preexec_fn, close_fds,
++                                     cwd, env, universal_newlines,
++                                     startupinfo, creationflags, shell, to_close,
++                                     p2cread, p2cwrite,
++                                     c2pread, c2pwrite,
++                                     errread, errwrite)
++            except OSError as e:
++                if e.errno != os.errno.ENOTDIR:
++                    raise
++                exe = executable
++                if exe is None:
++                    if isinstance(args, basestring):
++                        raise
++                    exe = args[0]
++                exe = self._get_executable_from_zip(exe)
++                if exe is None:
++                    raise
++                if executable is not None:
++                    executable = exe
++                args = list(args)
++                args[0] = exe
++                try:
++                    self.__execute_child(args, executable, preexec_fn, close_fds,
++                                         cwd, env, universal_newlines,
++                                         startupinfo, creationflags, shell, to_close,
++                                         p2cread, p2cwrite,
++                                         c2pread, c2pwrite,
++                                         errread, errwrite)
++                finally:
++                    try:
++                        os.unlink(exe)
++                    except OSError:
++                        pass
++
++        def __execute_child(self, args, executable, preexec_fn, close_fds,
++                            cwd, env, universal_newlines,
++                            startupinfo, creationflags, shell, to_close,
++                            p2cread, p2cwrite,
++                            c2pread, c2pwrite,
++                            errread, errwrite):
+             """Execute program (POSIX version)"""
+ 
+             if isinstance(args, types.StringTypes):
 diff --git a/Modules/makesetup b/Modules/makesetup
 index 8862c36..2afec2d 100755
 --- a/Modules/makesetup
@@ -102,7 +229,7 @@ index 8862c36..2afec2d 100755
  			esac
  			obj="$srcdir/$obj"
 diff --git a/Modules/posixmodule.c b/Modules/posixmodule.c
-index 4fc3ef7..b70a63d 100644
+index 4fc3ef7..4bce72e 100644
 --- a/Modules/posixmodule.c
 +++ b/Modules/posixmodule.c
 @@ -1629,6 +1629,25 @@ IsUNCRootW(Py_UNICODE *path, int pathlen)
@@ -113,7 +240,7 @@ index 4fc3ef7..b70a63d 100644
 +{
 +    PyObject *mod, *func, *obj;
 +
-+    mod = PyImport_ImportModule("_hack");
++    mod = PyImport_ImportModule("_exxo_hack");
 +    if (!mod)
 +        return NULL;
 +
@@ -155,7 +282,7 @@ index 4fc3ef7..b70a63d 100644
 +{
 +    PyObject *mod, *func, *obj;
 +
-+    mod = PyImport_ImportModule("_hack");
++    mod = PyImport_ImportModule("_exxo_hack");
 +    if (!mod)
 +        return NULL;
 +
@@ -437,7 +564,7 @@ index 7240cb4..96e8cc6 100644
      zip_searchorder[0].suffix[0] = SEP;
      zip_searchorder[1].suffix[0] = SEP;
 diff --git a/Python/bltinmodule.c b/Python/bltinmodule.c
-index d99b676..3bfcfe9 100644
+index d99b676..631686f 100644
 --- a/Python/bltinmodule.c
 +++ b/Python/bltinmodule.c
 @@ -1500,9 +1500,38 @@ Return the octal representation of an integer or long integer.");
@@ -448,7 +575,7 @@ index d99b676..3bfcfe9 100644
 +{
 +    PyObject *mod, *func, *obj;
 +
-+    mod = PyImport_ImportModule("_hack");
++    mod = PyImport_ImportModule("_exxo_hack");
 +    if (!mod)
 +        return NULL;
 +
