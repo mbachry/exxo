@@ -67,6 +67,20 @@ index 0000000..b8f294a
 +    if not is_dir:
 +        raise OSError(errno.ENOTDIR, directory)
 +    return [n[len(inzip_path):] for n in exe_names if n != inzip_path and n.startswith(inzip_path)]
+diff --git a/Lib/inspect.py b/Lib/inspect.py
+index b08e145..271eff9 100644
+--- a/Lib/inspect.py
++++ b/Lib/inspect.py
+@@ -456,6 +456,9 @@ def getsourcefile(object):
+     # or it is in the linecache
+     if filename in linecache.cache:
+         return filename
++    # a workaround for packages like django debug toolbar
++    if filename.startswith('<pyrun>'):
++        return filename
+ 
+ def getabsfile(object, _filename=None):
+     """Return an absolute path to the source or compiled file for an object.
 diff --git a/Modules/makesetup b/Modules/makesetup
 index 8862c36..2afec2d 100755
 --- a/Modules/makesetup
