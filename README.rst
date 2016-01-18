@@ -83,6 +83,24 @@ binary and save some space.
 
 .. _exxo git repository: https://github.com/mbachry/exxo/
 
+Showcase
+--------
+
+I plan to build few popular Python projects as a showcase of exxo
+capabilities. For now there's only one.
+
+Sentry
+~~~~~~
+
+`Link to download`_
+
+`Sentry`_ is a great error capturing and reporting tool - a life
+saver, if your code lives in a highly distributed environment. It's
+also a huge Django app, which makes it a good test bed for exxo.
+
+.. _Link to download: https://bintray.com/artifact/download/mbachry/exxo/sentry-8.0.1.tar.xz
+.. _Sentry: https://getsentry.com/welcome/
+
 Differences with similar projects
 ---------------------------------
 
