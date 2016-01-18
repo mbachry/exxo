@@ -1,7 +1,7 @@
 .PHONY: clean-build clean build
 
 help:
-	@echo "build - build release binary under target/"
+	@echo "build - build release binary under dist/"
 	@echo "clean - remove all build, test, coverage and Python artifacts"
 	@echo "clean-build - remove build artifacts"
 	@echo "clean-test - remove test and coverage artifacts"
@@ -12,7 +12,7 @@ help:
 	@echo "dist - package"
 
 build:
-	rm -fr env target/exxo
+	rm -fr env dist/exxo
 	python3 -m exxo.exxo venv env
 	bash -c "source env/bin/activate && $(shell which python3) -m exxo.exxo build -c"
 

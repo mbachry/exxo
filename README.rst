@@ -65,8 +65,8 @@ You can use the virtualenv in regular way. To build the target binary::
     cd example
     exxo build
 
-You'll find the binary under ``target`` directory. Go on and copy it
-to some server and see if it works.
+You'll find the binary under ``dist`` directory. Go on and copy it to
+some server and see if it works.
 
 If you have upx installed (``apt-get install upx`` or ``dnf install
 upx``) you can use ``-c`` flag (``exxo build -c``) to compress PyRun
@@ -127,4 +127,4 @@ Build PyRun binaries with::
     python3 -m exxo.bootstrap all
 
 From this point exxo is usable as ``python3 -m exxo.exxo``. Type
-``make build`` to build exxo binary under ``target`` directory.
+``make build`` to build exxo binary under ``dist`` directory.

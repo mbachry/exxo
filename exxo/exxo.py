@@ -113,7 +113,7 @@ def build(args):
     project_name = get_project_name(source_path)
     entry_point = args.main or get_entry_point(source_path, project_name)
     subprocess.check_call(['pip', 'install', '-U', source_path])
-    dst_bin = Path(args.output or (Path(source_path) / 'target' / project_name))
+    dst_bin = Path(args.output or (Path(source_path) / 'dist' / project_name))
     zipapp.create_archive(site_packages, zip_file, main=entry_point)
     create_binary(dst_bin, pyrun, zip_file, args.compress_pyrun)
 
