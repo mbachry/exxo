@@ -214,7 +214,7 @@ index a52124c..08f1318 100755
      # default prefix and exec_prefix
      if not exec_prefix:
 diff --git a/PyRun/Runtime/pyrun_template.py b/PyRun/Runtime/pyrun_template.py
-index 983a6ca..3998734 100644
+index 983a6ca..f847fb1 100644
 --- a/PyRun/Runtime/pyrun_template.py
 +++ b/PyRun/Runtime/pyrun_template.py
 @@ -44,6 +44,7 @@ COPYRIGHT = """\
@@ -225,33 +225,44 @@ index 983a6ca..3998734 100644
  import pyrun_config
  from pyrun_config import (
      pyrun_name,
-@@ -729,8 +730,11 @@ def pyrun_execute_script(pyrun_script, mode='file'):
+@@ -729,8 +730,12 @@ def pyrun_execute_script(pyrun_script, mode='file'):
  
  if __name__ == '__main__':
  
 +    running_from_zip = zipfile.is_zipfile(sys.executable)
++    exxo_force_interp = bool(os.environ.get('EXXO_FORCE_STANDALONE'))
 +
      # Parse the command line and get the script name
 -    pyrun_parse_cmdline()
-+    if not running_from_zip:
++    if not running_from_zip or exxo_force_interp:
 +        pyrun_parse_cmdline()
  
      # Enable unbuffered mode
      if pyrun_unbuffered:
-@@ -744,7 +748,7 @@ if __name__ == '__main__':
+@@ -744,7 +749,7 @@ if __name__ == '__main__':
          pyrun_info()
  
      # Start the runtime
 -    if not sys.argv and sys.stdin.isatty():
-+    if not sys.argv and sys.stdin.isatty() and not running_from_zip:
++    if not sys.argv and sys.stdin.isatty() and (not running_from_zip or exxo_force_interp):
  
          ### Enter interactive mode
  
-@@ -767,8 +771,11 @@ if __name__ == '__main__':
+@@ -760,6 +765,9 @@ if __name__ == '__main__':
+         if not sys.argv:
+             sys.argv = ['']
+ 
++        if running_from_zip and exxo_force_interp:
++            sys.path.insert(0, sys.executable)
++
+         # Enter interactive mode
+         pyrun_prompt()
+ 
+@@ -767,8 +775,11 @@ if __name__ == '__main__':
  
          ### Run a script
  
-+        if running_from_zip:
++        if running_from_zip and not exxo_force_interp:
 +            pyrun_script = sys.executable
 +            sys.argv[0] = sys.executable
          # Setup script to run
@@ -260,3 +271,13 @@ index 983a6ca..3998734 100644
              # Filter mode: read the script from stdin
              if pyrun_as_string or pyrun_as_module:
                  # Missing script argument
+@@ -813,6 +824,9 @@ if __name__ == '__main__':
+         # Setup sys.path
+         pyrun_setup_sys_path(script_path)
+ 
++        if running_from_zip and exxo_force_interp:
++            sys.path.insert(0, sys.executable)
++
+         # Import site module and run site.main() (which is not run by
+         # pyrun per default like in standard Python; see makepyrun.py)
+         if not pyrun_skip_site_main:

@@ -131,7 +131,7 @@ index b08e145..271eff9 100644
  def getabsfile(object, _filename=None):
      """Return an absolute path to the source or compiled file for an object.
 diff --git a/Lib/subprocess.py b/Lib/subprocess.py
-index f9e9104..e213e70 100644
+index f9e9104..2b355ae 100644
 --- a/Lib/subprocess.py
 +++ b/Lib/subprocess.py
 @@ -1191,6 +1191,21 @@ class Popen(object):
@@ -156,7 +156,7 @@ index f9e9104..e213e70 100644
  
          def _execute_child(self, args, executable, preexec_fn, close_fds,
                             cwd, env, universal_newlines,
-@@ -1198,6 +1213,51 @@ class Popen(object):
+@@ -1198,6 +1213,63 @@ class Popen(object):
                             p2cread, p2cwrite,
                             c2pread, c2pwrite,
                             errread, errwrite):
@@ -164,6 +164,18 @@ index f9e9104..e213e70 100644
 +            # it. may be a very unexpected behaviour
 +            if cwd is not None and cwd.startswith(sys.executable):
 +                cwd = None
++            # TODO: another shameless hack. most existing code assumes
++            # sys.executable is an usable python binary that can be
++            # called like "sys.executable -m module", etc. we support
++            # it by adding EXXO_FORCE_STANDALONE to env
++            if executable == sys.executable or args[0] == sys.executable:
++                if env is None:
++                    env = {}
++                # it's possible to disable above behaviour in a dirty
++                # way: by settings EXXO_FORCE_STANDALONE to an empty
++                # string
++                if 'EXXO_FORCE_STANDALONE' not in env:
++                    env['EXXO_FORCE_STANDALONE'] = '1'
 +            try:
 +                self.__execute_child(args, executable, preexec_fn, close_fds,
 +                                     cwd, env, universal_newlines,
