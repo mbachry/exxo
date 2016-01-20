@@ -94,6 +94,8 @@ Sentry
 
 `Link to download`_
 
+Required shared libs: ``apt-get install -y libpq5 libxml2 libxslt1.1``
+
 `Sentry`_ is a great error capturing and reporting tool - a life
 saver, if your code lives in a highly distributed environment. It's
 also a huge Django app, which makes it a good test bed for exxo.
