@@ -412,7 +412,7 @@ index 7c937e0..4c432ce 100644
          if (fd != -1) {
              Py_BEGIN_ALLOW_THREADS
 diff --git a/Modules/zipimport.c b/Modules/zipimport.c
-index f2cc245..76219a1 100644
+index f2cc245..bb22713 100644
 --- a/Modules/zipimport.c
 +++ b/Modules/zipimport.c
 @@ -3,14 +3,16 @@
@@ -440,13 +440,12 @@ index f2cc245..76219a1 100644
 -static struct st_zip_searchorder zip_searchorder[] = {
 -    {"/__init__.pyc", IS_PACKAGE | IS_BYTECODE},
 -    {"/__init__.pyo", IS_PACKAGE | IS_BYTECODE},
--    {"/__init__.py", IS_PACKAGE | IS_SOURCE},
 +static struct st_zip_searchorder *zip_searchorder;
 +static struct st_zip_searchorder zip_searchorder_base[] = {
 +    /* these two will be filled later in init_search_order() */
 +    {"", IS_PACKAGE | IS_BYTECODE},
 +    {"", IS_PACKAGE | IS_BYTECODE},
-+    {"", IS_PACKAGE | IS_SOURCE},
+     {"/__init__.py", IS_PACKAGE | IS_SOURCE},
      {".pyc", IS_BYTECODE},
 -    {".pyo", IS_BYTECODE},
 -    {".py", IS_SOURCE},
@@ -716,7 +715,7 @@ index f2cc245..76219a1 100644
  /* Get the code object associated with the module specified by
     'fullname'. */
  static PyObject *
-@@ -1378,11 +1565,25 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1378,11 +1565,26 @@ get_module_code(ZipImporter *self, PyObject *fullname,
      PyObject *code = NULL, *toc_entry, *subname;
      PyObject *path, *fullpath = NULL;
      struct st_zip_searchorder *zso;
@@ -732,7 +731,8 @@ index f2cc245..76219a1 100644
 +        if (code != Py_None) {
 +            if (code != NULL && p_modpath != NULL)
 +                *p_modpath = strip_pycache_from_path(PyTuple_GetItem(toc_entry, 0));
-+            *p_ispackage = 0;
++            if (p_ispackage != NULL)
++                *p_ispackage = 0;
 +            Py_DECREF(subname);
 +            return code;
 +        }
@@ -742,7 +742,7 @@ index f2cc245..76219a1 100644
      path = make_filename(self->prefix, subname);
      Py_DECREF(subname);
      if (path == NULL)
-@@ -1400,7 +1601,6 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1400,7 +1602,6 @@ get_module_code(ZipImporter *self, PyObject *fullname,
                                 self->archive, (int)SEP, fullpath);
          toc_entry = PyDict_GetItem(self->files, fullpath);
          if (toc_entry != NULL) {
@@ -750,7 +750,7 @@ index f2cc245..76219a1 100644
              int ispackage = zso->type & IS_PACKAGE;
              int isbytecode = zso->type & IS_BYTECODE;
  
-@@ -1413,6 +1613,17 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1413,6 +1614,17 @@ get_module_code(ZipImporter *self, PyObject *fullname,
              Py_CLEAR(fullpath);
              if (p_ispackage != NULL)
                  *p_ispackage = ispackage;
@@ -768,7 +768,7 @@ index f2cc245..76219a1 100644
              code = get_code_from_data(self, ispackage,
                                        isbytecode, mtime,
                                        toc_entry);
-@@ -1422,10 +1633,8 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1422,10 +1634,8 @@ get_module_code(ZipImporter *self, PyObject *fullname,
                  Py_DECREF(code);
                  continue;
              }
@@ -781,7 +781,7 @@ index f2cc245..76219a1 100644
              goto exit;
          }
          else
-@@ -1467,6 +1676,56 @@ static struct PyModuleDef zipimportmodule = {
+@@ -1467,6 +1677,54 @@ static struct PyModuleDef zipimportmodule = {
      NULL
  };
  
@@ -803,11 +803,9 @@ index f2cc245..76219a1 100644
 +             "%c__pycache__%c__init__.%s.pyc", SEP, SEP, _PySys_ImplCacheTag);
 +    snprintf(zip_searchorder_base[1].suffix, sizeof(zip_searchorder_base[1].suffix),
 +             "%c__pycache__%c__init__.%s.pyo", SEP, SEP, _PySys_ImplCacheTag);
-+    snprintf(zip_searchorder_base[2].suffix, sizeof(zip_searchorder_base[0].suffix),
-+             "%c__init__.py", SEP);
 +
 +    /* Correct directory separator */
-+    zip_searchorder_base[3].suffix[0] = SEP;
++    zip_searchorder_base[2].suffix[0] = SEP;
 +
 +    zip_searchorder = PyMem_Malloc(sizeof(struct st_zip_searchorder) *
 +                                   (zip_searchorder_base_len + get_dynload_file_tab_len() + 1));
@@ -838,7 +836,7 @@ index f2cc245..76219a1 100644
  PyMODINIT_FUNC
  PyInit_zipimport(void)
  {
-@@ -1475,20 +1734,8 @@ PyInit_zipimport(void)
+@@ -1475,20 +1733,8 @@ PyInit_zipimport(void)
      if (PyType_Ready(&ZipImporter_Type) < 0)
          return NULL;
  
