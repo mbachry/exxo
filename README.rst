@@ -2,6 +2,10 @@
 exxo
 ====
 
+.. image:: https://travis-ci.org/mbachry/exxo.svg?branch=master
+    :alt: Build status
+    :target: https://travis-ci.org/mbachry/exxo
+
 **Only Linux x86_64 supported for now**
 
 Build your Python package into a portable one-file binary and deploy
