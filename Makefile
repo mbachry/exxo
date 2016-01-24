@@ -24,7 +24,7 @@ clean-test:
 	rm -fr htmlcov/
 
 test:
-	python setup.py test
+	cd tests && ./run.sh
 
 test-all:
 	tox
