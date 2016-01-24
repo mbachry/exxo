@@ -1,9 +1,13 @@
 language: python
 
 python:
-  - "3.4"
-  - "2.7"
+  - 3.4
 
-install: pip install -r requirements.txt
+before_install:
+  - sudo apt-get -y build-dep python3.4
 
-script: python setup.py test
+install:
+  - pip3 install --user -r requirements.txt
+  - python3 -m exxo.bootstrap all
+
+script: make test
