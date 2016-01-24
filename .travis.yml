@@ -1,13 +1,17 @@
 language: python
 
+dist: trusty
+
 python:
   - 3.4
 
 before_install:
-  - sudo apt-get -y build-dep python3.4
+  - echo 'deb-src http://archive.ubuntu.com/ubuntu trusty universe multiverse' | sudo tee /etc/apt/sources.list.d/trusty-src.list
+  - sudo apt-get -y update
+  - sudo apt-get -y build-dep python3
 
 install:
-  - pip3 install --user -r requirements.txt
+  - pip3 install -r requirements.txt
   - python3 -m exxo.bootstrap all
 
 script: make test
