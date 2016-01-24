@@ -1,6 +1,7 @@
 import os
 import sys
 import stat
+import io
 import inspect
 import ctypes
 import subprocess
@@ -20,7 +21,7 @@ def test_bundled_file_open():
 
 
 def test_bundled_file_open_not_writable():
-    with pytest.raises(OSError):
+    with pytest.raises(io.UnsupportedOperation):
         with open(BUNDLED_FILE, 'w') as fp:
             fp.write('bar')
 

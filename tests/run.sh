@@ -9,6 +9,8 @@ function _exxo {
 
 function run_inzip_test {
     pyversion="$1"
+    shift
+    args="$@"
     rm -rf inzip/env inzip/dist
     _exxo venv -p "$pyversion" inzip/env
     set +u
@@ -17,9 +19,10 @@ function run_inzip_test {
     _exxo build -s inzip
     deactivate
     set -u
-    ( cd inzip/dist && ./inzip -rx -v --pyarg inzip )
+    ( cd inzip/dist && ./inzip -rx -v $args --pyarg inzip )
 }
 
 
 run_inzip_test 3.4
-# run_inzip_test 2.7
+# TODO: figure out why --assert=plain is needed
+run_inzip_test 2.7 --assert=plain
