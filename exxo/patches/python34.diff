@@ -117,7 +117,7 @@ index 5c803ff..f18d575 100644
              self._handle = handle
  
 diff --git a/Lib/imp.py b/Lib/imp.py
-index c922e92..3d9d4f8 100644
+index c922e92..847375d 100644
 --- a/Lib/imp.py
 +++ b/Lib/imp.py
 @@ -26,6 +26,7 @@ import sys
@@ -128,7 +128,7 @@ index c922e92..3d9d4f8 100644
  
  warnings.warn("the imp module is deprecated in favour of importlib; "
                "see the module's documentation for alternative uses",
-@@ -279,6 +280,18 @@ def find_module(name, path=None):
+@@ -279,6 +280,17 @@ def find_module(name, path=None):
              path = sys.path
  
      for entry in path:
@@ -139,11 +139,10 @@ index c922e92..3d9d4f8 100644
 +                loader = meta(entry)
 +            except ImportError:
 +                continue
-+            print (loader, name, entry, loader.find_module(name))
 +            if loader.find_module(name) is None:
 +                continue
 +            newpath = os.path.join(entry, name)
-+            return None, newpath, ()
++            return None, newpath, ('', '', IMP_HOOK)
          package_directory = os.path.join(entry, name)
          for suffix in ['.py', machinery.BYTECODE_SUFFIXES[0]]:
              package_file_name = '__init__' + suffix
