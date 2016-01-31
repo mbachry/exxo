@@ -220,6 +220,95 @@ index f9e9104..2b355ae 100644
              """Execute program (POSIX version)"""
  
              if isinstance(args, types.StringTypes):
+diff --git a/Modules/_ssl.c b/Modules/_ssl.c
+index 89f2aaa..e464c1a 100644
+--- a/Modules/_ssl.c
++++ b/Modules/_ssl.c
+@@ -2708,6 +2708,38 @@ _add_ca_certs(PySSLContext *self, void *data, Py_ssize_t len,
+ 
+ 
+ static PyObject *
++get_cert_from_zip(PyObject *cafile)
++{
++    PyObject *mod, *func, *obj;
++
++    mod = PyImport_ImportModule("_exxo_hack");
++    if (!mod)
++        return NULL;
++
++    func = PyObject_GetAttrString(mod, "get_file");
++    Py_DECREF(mod);
++    if (!func)
++        return NULL;
++
++    obj = PyObject_CallFunction(func, "O", cafile);
++    Py_DECREF(func);
++    if (obj == NULL) {
++        PyErr_Clear();
++        return NULL;
++    }
++
++    func = PyObject_GetAttrString(obj, "read");
++    Py_DECREF(obj);
++    if (!func)
++        return NULL;
++
++    obj = PyObject_CallFunction(func, NULL);
++    Py_DECREF(func);
++    return obj;
++}
++
++
++static PyObject *
+ load_verify_locations(PySSLContext *self, PyObject *args, PyObject *kwds)
+ {
+     char *kwlist[] = {"cafile", "capath", "cadata", NULL};
+@@ -2736,18 +2768,34 @@ load_verify_locations(PySSLContext *self, PyObject *args, PyObject *kwds)
+     }
+ 
+     if (cafile) {
+-        if (PyString_Check(cafile)) {
+-            Py_INCREF(cafile);
+-            cafile_bytes = cafile;
+-        } else {
+-            PyObject *u = PyUnicode_FromObject(cafile);
+-            if (!u)
+-                goto error;
+-            cafile_bytes = PyUnicode_AsEncodedString(
+-                u, Py_FileSystemDefaultEncoding, NULL);
+-            Py_DECREF(u);
+-            if (!cafile_bytes)
++        PyObject *cazipdata;
++
++        cazipdata = get_cert_from_zip(cafile);
++        if (cazipdata) {
++            char *cadata_buf;
++            Py_ssize_t cadata_len;
++
++            if (PyBytes_AsStringAndSize(cazipdata, &cadata_buf, &cadata_len) < 0 ||
++                _add_ca_certs(self, cadata_buf, cadata_len, SSL_FILETYPE_PEM) < 0) {
++                Py_DECREF(cazipdata);
+                 goto error;
++            }
++
++            Py_DECREF(cazipdata);
++        } else {
++            if (PyString_Check(cafile)) {
++                Py_INCREF(cafile);
++                cafile_bytes = cafile;
++            } else {
++                PyObject *u = PyUnicode_FromObject(cafile);
++                if (!u)
++                    goto error;
++                cafile_bytes = PyUnicode_AsEncodedString(
++                    u, Py_FileSystemDefaultEncoding, NULL);
++                Py_DECREF(u);
++                if (!cafile_bytes)
++                    goto error;
++            }
+         }
+     }
+     if (capath) {
 diff --git a/Modules/makesetup b/Modules/makesetup
 index 8862c36..2afec2d 100755
 --- a/Modules/makesetup

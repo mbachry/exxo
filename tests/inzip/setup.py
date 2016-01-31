@@ -3,6 +3,7 @@ from setuptools import setup
 requirements = [
     'pytest',
     'setuptools',
+    'requests',
 ]
 
 setup(

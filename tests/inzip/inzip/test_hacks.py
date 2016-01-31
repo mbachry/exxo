@@ -5,6 +5,7 @@ import io
 import inspect
 import ctypes
 import subprocess
+import requests
 import pytest
 
 
@@ -86,3 +87,7 @@ def test_subprocess_with_cwd_inside_zip():
 def test_subprocess_can_launch_itself_as_python_interpreter():
     buf = subprocess.check_output([sys.executable, '-V']).decode().strip()
     assert buf.startswith('pyrun')
+
+
+def test_ssl_pems_loadable_from_zip():
+    requests.get('https://google.com')
