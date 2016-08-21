@@ -53,7 +53,7 @@ Exxo is self-hosting. You can download it `here`_. The archive
 contains just one file: exxo binary you should put somewhere in your
 ``PATH``.
 
-.. _here: https://bintray.com/artifact/download/mbachry/exxo/exxo-0.0.5.tar.xz
+.. _here: https://bintray.com/artifact/download/mbachry/exxo/exxo-0.0.6.tar.xz
 
 Quick start
 -----------
