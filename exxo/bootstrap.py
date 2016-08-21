@@ -11,19 +11,19 @@ import jinja2
 
 
 PYTHON_VERSION_MAP = {
-    '3.4': {
-        'full_version': '3.4.3',
-        'patch': Path('patches/python34.diff'),
+    '3.5': {
+        'full_version': '3.5.2',
+        'patch': Path('patches/python35.diff'),
         'unicode': 'ucs4',
     },
     '2.7': {
-        'full_version': '2.7.11',
+        'full_version': '2.7.12',
         'patch': Path('patches/python27.diff'),
         'unicode': 'ucs4',
     },
 }
 
-PYRUN_VERSION = '2.1.1'
+PYRUN_VERSION = '2.2.1'
 SETUPTOOLS_VERSION = '19.2'
 PIP_VERSION = '7.1.2'
 NCURSES_VERSION = '5.9+20150516'

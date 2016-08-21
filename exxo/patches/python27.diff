@@ -68,10 +68,10 @@ index 0000000..b8f294a
 +        raise OSError(errno.ENOTDIR, directory)
 +    return [n[len(inzip_path):] for n in exe_names if n != inzip_path and n.startswith(inzip_path)]
 diff --git a/Lib/ctypes/__init__.py b/Lib/ctypes/__init__.py
-index 4e97c15..1ccf2ea 100644
+index e24cfd2..f234797 100644
 --- a/Lib/ctypes/__init__.py
 +++ b/Lib/ctypes/__init__.py
-@@ -329,6 +329,29 @@ def ARRAY(typ, len):
+@@ -326,6 +326,29 @@ def ARRAY(typ, len):
  ################################################################
  
  
@@ -101,7 +101,7 @@ index 4e97c15..1ccf2ea 100644
  class CDLL(object):
      """An instance of this class represents a loaded dll/shared
      library, exporting functions using the standard C calling
-@@ -362,7 +385,13 @@ class CDLL(object):
+@@ -359,7 +382,13 @@ class CDLL(object):
          self._FuncPtr = _FuncPtr
  
          if handle is None:
@@ -131,10 +131,10 @@ index b08e145..271eff9 100644
  def getabsfile(object, _filename=None):
      """Return an absolute path to the source or compiled file for an object.
 diff --git a/Lib/subprocess.py b/Lib/subprocess.py
-index f9e9104..2b355ae 100644
+index 187566b..cd707c9 100644
 --- a/Lib/subprocess.py
 +++ b/Lib/subprocess.py
-@@ -1191,6 +1191,21 @@ class Popen(object):
+@@ -1195,6 +1195,21 @@ class Popen(object):
                      except:
                          pass
  
@@ -156,7 +156,7 @@ index f9e9104..2b355ae 100644
  
          def _execute_child(self, args, executable, preexec_fn, close_fds,
                             cwd, env, universal_newlines,
-@@ -1198,6 +1213,63 @@ class Popen(object):
+@@ -1202,6 +1217,63 @@ class Popen(object):
                             p2cread, p2cwrite,
                             c2pread, c2pwrite,
                             errread, errwrite):
@@ -221,10 +221,10 @@ index f9e9104..2b355ae 100644
  
              if isinstance(args, types.StringTypes):
 diff --git a/Modules/_ssl.c b/Modules/_ssl.c
-index 89f2aaa..e464c1a 100644
+index f291352..0918134 100644
 --- a/Modules/_ssl.c
 +++ b/Modules/_ssl.c
-@@ -2708,6 +2708,38 @@ _add_ca_certs(PySSLContext *self, void *data, Py_ssize_t len,
+@@ -2713,6 +2713,38 @@ _add_ca_certs(PySSLContext *self, void *data, Py_ssize_t len,
  
  
  static PyObject *
@@ -263,7 +263,7 @@ index 89f2aaa..e464c1a 100644
  load_verify_locations(PySSLContext *self, PyObject *args, PyObject *kwds)
  {
      char *kwlist[] = {"cafile", "capath", "cadata", NULL};
-@@ -2736,18 +2768,34 @@ load_verify_locations(PySSLContext *self, PyObject *args, PyObject *kwds)
+@@ -2741,18 +2773,34 @@ load_verify_locations(PySSLContext *self, PyObject *args, PyObject *kwds)
      }
  
      if (cafile) {
@@ -418,7 +418,7 @@ index 4fc3ef7..4bce72e 100644
      if ((d = PyList_New(0)) == NULL) {
          Py_BEGIN_ALLOW_THREADS
 diff --git a/Modules/zipimport.c b/Modules/zipimport.c
-index 7240cb4..96e8cc6 100644
+index ee44cab..f9f51f0 100644
 --- a/Modules/zipimport.c
 +++ b/Modules/zipimport.c
 @@ -2,15 +2,18 @@
@@ -576,7 +576,7 @@ index 7240cb4..96e8cc6 100644
      code = get_module_code(self, fullname, &ispackage, &modpath);
      if (code == NULL)
          return NULL;
-@@ -1168,6 +1260,16 @@ get_module_code(ZipImporter *self, char *fullname,
+@@ -1260,6 +1352,16 @@ get_module_code(ZipImporter *self, char *fullname,
                  mtime = get_mtime_of_source(self, path);
              if (p_ispackage != NULL)
                  *p_ispackage = ispackage;
@@ -593,7 +593,7 @@ index 7240cb4..96e8cc6 100644
              code = get_code_from_data(self, ispackage,
                                        isbytecode, mtime,
                                        toc_entry);
-@@ -1187,6 +1289,60 @@ get_module_code(ZipImporter *self, char *fullname,
+@@ -1279,6 +1381,60 @@ get_module_code(ZipImporter *self, char *fullname,
      return NULL;
  }
  
@@ -654,7 +654,7 @@ index 7240cb4..96e8cc6 100644
  
  /* Module init */
  
-@@ -1212,6 +1368,9 @@ initzipimport(void)
+@@ -1304,6 +1460,9 @@ initzipimport(void)
      if (PyType_Ready(&ZipImporter_Type) < 0)
          return;
  
@@ -665,7 +665,7 @@ index 7240cb4..96e8cc6 100644
      zip_searchorder[0].suffix[0] = SEP;
      zip_searchorder[1].suffix[0] = SEP;
 diff --git a/Python/bltinmodule.c b/Python/bltinmodule.c
-index d99b676..631686f 100644
+index 2977bcd..44eb09f 100644
 --- a/Python/bltinmodule.c
 +++ b/Python/bltinmodule.c
 @@ -1500,9 +1500,38 @@ Return the octal representation of an integer or long integer.");
@@ -709,10 +709,10 @@ index d99b676..631686f 100644
  
  PyDoc_STRVAR(open_doc,
 diff --git a/Python/import.c b/Python/import.c
-index e47ce63..5e5c4e6 100644
+index 96f7d47..2ce34aa 100644
 --- a/Python/import.c
 +++ b/Python/import.c
-@@ -1292,6 +1292,24 @@ static int case_ok(char *, Py_ssize_t, Py_ssize_t, char *);
+@@ -1310,6 +1310,24 @@ static int case_ok(char *, Py_ssize_t, Py_ssize_t, char *);
  static int find_init_module(char *); /* Forward */
  static struct filedescr importhookdescr = {"", "", IMP_HOOK};
  
@@ -737,7 +737,7 @@ index e47ce63..5e5c4e6 100644
  static struct filedescr *
  find_module(char *fullname, char *subname, PyObject *path, char *buf,
              size_t buflen, FILE **p_fp, PyObject **p_loader)
-@@ -1305,6 +1323,7 @@ find_module(char *fullname, char *subname, PyObject *path, char *buf,
+@@ -1323,6 +1341,7 @@ find_module(char *fullname, char *subname, PyObject *path, char *buf,
      static struct filedescr fd_frozen = {"", "", PY_FROZEN};
      static struct filedescr fd_builtin = {"", "", C_BUILTIN};
      static struct filedescr fd_package = {"", "", PKG_DIRECTORY};
@@ -745,7 +745,7 @@ index e47ce63..5e5c4e6 100644
      char *name;
  #if defined(PYOS_OS2)
      size_t saved_len;
-@@ -1468,18 +1487,25 @@ find_module(char *fullname, char *subname, PyObject *path, char *buf,
+@@ -1486,18 +1505,25 @@ find_module(char *fullname, char *subname, PyObject *path, char *buf,
              }
              /* Note: importer is a borrowed reference */
              if (importer != Py_None) {
@@ -773,7 +773,7 @@ index e47ce63..5e5c4e6 100644
                  }
                  Py_DECREF(loader);
                  continue;
-@@ -1956,7 +1982,8 @@ load_module(char *name, FILE *fp, char *pathname, int type, PyObject *loader)
+@@ -1974,7 +2000,8 @@ load_module(char *name, FILE *fp, char *pathname, int type, PyObject *loader)
          Py_INCREF(m);
          break;
  
@@ -783,7 +783,7 @@ index e47ce63..5e5c4e6 100644
          if (loader == NULL) {
              PyErr_SetString(PyExc_ImportError,
                              "import hook without loader");
-@@ -2946,7 +2973,7 @@ static PyObject *
+@@ -2964,7 +2991,7 @@ static PyObject *
  call_find_module(char *name, PyObject *path)
  {
      extern int fclose(FILE *);
@@ -792,7 +792,7 @@ index e47ce63..5e5c4e6 100644
      struct filedescr *fdp;
      char *pathname;
      FILE *fp = NULL;
-@@ -2958,11 +2985,12 @@ call_find_module(char *name, PyObject *path)
+@@ -2976,11 +3003,12 @@ call_find_module(char *name, PyObject *path)
      pathname[0] = '\0';
      if (path == Py_None)
          path = NULL;
@@ -806,7 +806,7 @@ index e47ce63..5e5c4e6 100644
      if (fp != NULL) {
          fob = PyFile_FromFile(fp, pathname, fdp->mode, fclose);
          if (fob == NULL) {
-@@ -2974,8 +3002,24 @@ call_find_module(char *name, PyObject *path)
+@@ -2992,8 +3020,24 @@ call_find_module(char *name, PyObject *path)
          fob = Py_None;
          Py_INCREF(fob);
      }

@@ -8,11 +8,11 @@ import pkgutil
 import tarfile
 import tempfile
 import io
+import zipapp
 from pathlib import Path
 import jinja2
 from .bootstrap import PYTHON_VERSION_MAP, ensure_dir_exists
 from .venv import ACTIVATE_SCRIPT, PIP_SCRIPT
-from . import zipapp
 
 
 def create_binary(dst_path, pyrun, zip_file, compress_pyrun):
@@ -128,8 +128,8 @@ def main():
     subparsers.required = True
     parser_venv = subparsers.add_parser('venv', help='create virtualenv')
     parser_venv.add_argument('envdir', help='virtualenv directory')
-    parser_venv.add_argument('-p', '--py-version', choices=py_versions, default='3.4',
-                             help='python version to use (default: 3.4)')
+    parser_venv.add_argument('-p', '--py-version', choices=py_versions, default='3.5',
+                             help='python version to use (default: 3.5)')
     parser_venv.set_defaults(func=create_virtualenv)
     parser_build = subparsers.add_parser('build', help='build')
     parser_build.add_argument('-o', '--output', help='target binary')

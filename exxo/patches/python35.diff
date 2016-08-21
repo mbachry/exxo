@@ -68,10 +68,10 @@ index 0000000..b8f294a
 +        raise OSError(errno.ENOTDIR, directory)
 +    return [n[len(inzip_path):] for n in exe_names if n != inzip_path and n.startswith(inzip_path)]
 diff --git a/Lib/ctypes/__init__.py b/Lib/ctypes/__init__.py
-index 5c803ff..f18d575 100644
+index 0d86078..2b55fe9 100644
 --- a/Lib/ctypes/__init__.py
 +++ b/Lib/ctypes/__init__.py
-@@ -315,6 +315,29 @@ def ARRAY(typ, len):
+@@ -311,6 +311,29 @@ def ARRAY(typ, len):
  ################################################################
  
  
@@ -101,7 +101,7 @@ index 5c803ff..f18d575 100644
  class CDLL(object):
      """An instance of this class represents a loaded dll/shared
      library, exporting functions using the standard C calling
-@@ -348,7 +371,13 @@ class CDLL(object):
+@@ -344,7 +367,13 @@ class CDLL(object):
          self._FuncPtr = _FuncPtr
  
          if handle is None:
@@ -117,10 +117,10 @@ index 5c803ff..f18d575 100644
              self._handle = handle
  
 diff --git a/Lib/imp.py b/Lib/imp.py
-index c922e92..847375d 100644
+index e264391..8b1568a 100644
 --- a/Lib/imp.py
 +++ b/Lib/imp.py
-@@ -26,6 +26,7 @@ import sys
+@@ -27,6 +27,7 @@ import sys
  import tokenize
  import types
  import warnings
@@ -128,7 +128,7 @@ index c922e92..847375d 100644
  
  warnings.warn("the imp module is deprecated in favour of importlib; "
                "see the module's documentation for alternative uses",
-@@ -279,6 +280,17 @@ def find_module(name, path=None):
+@@ -278,6 +279,17 @@ def find_module(name, path=None):
              path = sys.path
  
      for entry in path:
@@ -147,10 +147,10 @@ index c922e92..847375d 100644
          for suffix in ['.py', machinery.BYTECODE_SUFFIXES[0]]:
              package_file_name = '__init__' + suffix
 diff --git a/Lib/inspect.py b/Lib/inspect.py
-index 4298de6..9b9e34d 100644
+index e830eb6..d36e7b7 100644
 --- a/Lib/inspect.py
 +++ b/Lib/inspect.py
-@@ -585,6 +585,9 @@ def getsourcefile(object):
+@@ -674,6 +674,9 @@ def getsourcefile(object):
      # or it is in the linecache
      if filename in linecache.cache:
          return filename
@@ -161,12 +161,12 @@ index 4298de6..9b9e34d 100644
  def getabsfile(object, _filename=None):
      """Return an absolute path to the source or compiled file for an object.
 diff --git a/Lib/subprocess.py b/Lib/subprocess.py
-index 04cfb44..dd5eba9 100644
+index d8d6ab2..2e63485 100644
 --- a/Lib/subprocess.py
 +++ b/Lib/subprocess.py
-@@ -1332,6 +1332,21 @@ class Popen(object):
-             if start_fd <= MAXFD:
-                 os.closerange(start_fd, MAXFD)
+@@ -1424,6 +1424,21 @@ class Popen(object):
+                     c2pread, c2pwrite,
+                     errread, errwrite)
  
 +        def __get_executable_from_zip(self, name):
 +            import tempfile
@@ -186,7 +186,7 @@ index 04cfb44..dd5eba9 100644
  
          def _execute_child(self, args, executable, preexec_fn, close_fds,
                             pass_fds, cwd, env,
-@@ -1340,6 +1355,66 @@ class Popen(object):
+@@ -1432,6 +1447,66 @@ class Popen(object):
                             c2pread, c2pwrite,
                             errread, errwrite,
                             restore_signals, start_new_session):
@@ -254,10 +254,10 @@ index 04cfb44..dd5eba9 100644
  
              if isinstance(args, (str, bytes)):
 diff --git a/Makefile.pre.in b/Makefile.pre.in
-index e19fc00..4d372e9 100644
+index f0ddddb..c717461 100644
 --- a/Makefile.pre.in
 +++ b/Makefile.pre.in
-@@ -1083,9 +1083,9 @@ bininstall: altbininstall
+@@ -1128,9 +1128,9 @@ bininstall: altbininstall
  	(cd $(DESTDIR)$(BINDIR); $(LN) -s python$(VERSION)$(EXE) python3$(EXE))
  	-if test "$(VERSION)" != "$(LDVERSION)"; then \
  		rm -f $(DESTDIR)$(BINDIR)/python$(VERSION)-config; \
@@ -270,13 +270,15 @@ index e19fc00..4d372e9 100644
  	-rm -f $(DESTDIR)$(BINDIR)/python3-config
  	(cd $(DESTDIR)$(BINDIR); $(LN) -s python$(VERSION)-config python3-config)
 diff --git a/Modules/_io/_iomodule.c b/Modules/_io/_iomodule.c
-index 44116d8..31cb666 100644
+index 65c955a..34ff398 100644
 --- a/Modules/_io/_iomodule.c
 +++ b/Modules/_io/_iomodule.c
-@@ -218,6 +218,25 @@ PyDoc_STRVAR(open_doc,
-     );
+@@ -52,6 +52,27 @@ PyObject *_PyIO_empty_str;
+ PyObject *_PyIO_empty_bytes;
+ PyObject *_PyIO_zero;
  
- static PyObject *
++
++static PyObject *
 +get_inzip_file(PyObject *filename)
 +{
 +    PyObject *mod, *func, *obj;
@@ -295,11 +297,11 @@ index 44116d8..31cb666 100644
 +    return obj;
 +}
 +
-+static PyObject *
- io_open(PyObject *self, PyObject *args, PyObject *kwds)
- {
-     char *kwlist[] = {"file", "mode", "buffering",
-@@ -353,6 +372,11 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
++
+ 
+ PyDoc_STRVAR(module_doc,
+ "The io module provides the Python interfaces to stream handling. The\n"
+@@ -351,6 +372,11 @@ _io_open_impl(PyObject *module, PyObject *file, const char *mode,
      /* Create the Raw file stream */
      raw = PyObject_CallFunction((PyObject *)&PyFileIO_Type,
                                  "OsiO", file, rawmode, closefd, opener);
@@ -312,13 +314,14 @@ index 44116d8..31cb666 100644
          return NULL;
      result = raw;
 diff --git a/Modules/_ssl.c b/Modules/_ssl.c
-index d918671..7f87eb4 100644
+index 391034e..b15ddee 100644
 --- a/Modules/_ssl.c
 +++ b/Modules/_ssl.c
-@@ -2634,6 +2634,38 @@ _add_ca_certs(PySSLContext *self, void *data, Py_ssize_t len,
+@@ -2963,6 +2963,38 @@ _add_ca_certs(PySSLContext *self, void *data, Py_ssize_t len,
+ }
  
  
- static PyObject *
++static PyObject *
 +get_cert_from_zip(PyObject *cafile)
 +{
 +    PyObject *mod, *func, *obj;
@@ -350,11 +353,10 @@ index d918671..7f87eb4 100644
 +}
 +
 +
-+static PyObject *
- load_verify_locations(PySSLContext *self, PyObject *args, PyObject *kwds)
- {
-     char *kwlist[] = {"cafile", "capath", "cadata", NULL};
-@@ -2709,6 +2741,25 @@ load_verify_locations(PySSLContext *self, PyObject *args, PyObject *kwds)
+ /*[clinic input]
+ _ssl._SSLContext.load_verify_locations
+     cafile: object = NULL
+@@ -3044,6 +3076,25 @@ _ssl__SSLContext_load_verify_locations_impl(PySSLContext *self,
          }
      }
  
@@ -381,7 +383,7 @@ index d918671..7f87eb4 100644
      if (cafile || capath) {
          if (cafile)
 diff --git a/Modules/makesetup b/Modules/makesetup
-index 8b5cc28..8666e5c 100755
+index 90db42e..3c93828 100755
 --- a/Modules/makesetup
 +++ b/Modules/makesetup
 @@ -176,6 +176,7 @@ sed -e 's/[ 	]*#.*//' -e '/^[ 	]*$/d' |
@@ -401,10 +403,10 @@ index 8b5cc28..8666e5c 100755
  			esac
  			obj="$srcdir/$obj"
 diff --git a/Modules/posixmodule.c b/Modules/posixmodule.c
-index 7c937e0..4c432ce 100644
+index b854caf..e016b6f 100644
 --- a/Modules/posixmodule.c
 +++ b/Modules/posixmodule.c
-@@ -2333,6 +2333,24 @@ _pystat_fromstructstat(STRUCT_STAT *st)
+@@ -2100,6 +2100,24 @@ _pystat_fromstructstat(STRUCT_STAT *st)
  
  /* POSIX methods */
  
@@ -429,7 +431,7 @@ index 7c937e0..4c432ce 100644
  
  static PyObject *
  posix_do_stat(char *function_name, path_t *path,
-@@ -2379,7 +2397,10 @@ posix_do_stat(char *function_name, path_t *path,
+@@ -2146,7 +2164,10 @@ posix_do_stat(char *function_name, path_t *path,
      Py_END_ALLOW_THREADS
  
      if (result != 0) {
@@ -441,8 +443,8 @@ index 7c937e0..4c432ce 100644
      }
  
      return _pystat_fromstructstat(&st);
-@@ -3611,6 +3632,25 @@ exit:
- 
+@@ -3452,6 +3473,26 @@ os_link_impl(PyObject *module, path_t *src, path_t *dst, int src_dir_fd,
+ #endif
  
  
 +static PyObject *
@@ -464,10 +466,11 @@ index 7c937e0..4c432ce 100644
 +    return obj;
 +}
 +
- PyDoc_STRVAR(posix_listdir__doc__,
- "listdir(path='.') -> list_of_filenames\n\n\
- Return a list containing the names of the files in the directory.\n\
-@@ -3825,7 +3865,10 @@ _posix_listdir(path_t *path, PyObject *list)
++
+ #if defined(MS_WINDOWS) && !defined(HAVE_OPENDIR)
+ static PyObject *
+ _listdir_windows_no_opendir(path_t *path, PyObject *list)
+@@ -3652,7 +3693,10 @@ _posix_listdir(path_t *path, PyObject *list)
      }
  
      if (dirp == NULL) {
@@ -480,7 +483,7 @@ index 7c937e0..4c432ce 100644
          if (fd != -1) {
              Py_BEGIN_ALLOW_THREADS
 diff --git a/Modules/zipimport.c b/Modules/zipimport.c
-index f2cc245..bb22713 100644
+index e840271..c7ef162 100644
 --- a/Modules/zipimport.c
 +++ b/Modules/zipimport.c
 @@ -3,14 +3,16 @@
@@ -501,35 +504,42 @@ index f2cc245..bb22713 100644
      int type;
  };
  
-@@ -23,15 +25,21 @@ _Py_IDENTIFIER(replace);
-    non-package .pyc, .pyo and .py entries. The .pyc and .pyo entries
+@@ -23,13 +25,19 @@ _Py_IDENTIFIER(replace);
+    non-package .pyc, and .py entries. The .pyc entries
     are swapped by initzipimport() if we run in optimized mode. Also,
     '/' is replaced by SEP there. */
 -static struct st_zip_searchorder zip_searchorder[] = {
 -    {"/__init__.pyc", IS_PACKAGE | IS_BYTECODE},
--    {"/__init__.pyo", IS_PACKAGE | IS_BYTECODE},
+-    {"/__init__.py", IS_PACKAGE | IS_SOURCE},
 +static struct st_zip_searchorder *zip_searchorder;
 +static struct st_zip_searchorder zip_searchorder_base[] = {
 +    /* these two will be filled later in init_search_order() */
 +    {"", IS_PACKAGE | IS_BYTECODE},
-+    {"", IS_PACKAGE | IS_BYTECODE},
-     {"/__init__.py", IS_PACKAGE | IS_SOURCE},
++    {"", IS_PACKAGE | IS_SOURCE},
      {".pyc", IS_BYTECODE},
--    {".pyo", IS_BYTECODE},
 -    {".py", IS_SOURCE},
 -    {"", 0}
 +    {".py", IS_SOURCE}
  };
 +static const int zip_searchorder_base_len = sizeof(zip_searchorder_base) / sizeof(zip_searchorder_base[0]);
 +
-+extern PyObject *
-+_PyImport_LoadDynamicModule(PyObject *name, PyObject *path, FILE *fp);
++extern PyObject *_PyImport_LoadDynamicModuleWithSpec(PyObject *spec, FILE *fp);
 +extern const char *_PyImport_DynLoadFiletab[];
 +extern const char * _PySys_ImplCacheTag;
  
  /* zipimporter object definition and support */
  
-@@ -55,6 +63,7 @@ static PyObject *read_directory(PyObject *archive);
+@@ -42,6 +50,9 @@ struct _zipimporter {
+     PyObject *prefix;   /* file prefix: "a/sub/directory/",
+                            encoded to the filesystem encoding */
+     PyObject *files;    /* dict with file info {path: toc_entry} */
++
++    PyObject *make_spec;
++    PyObject *extension_loader;
+ };
+ 
+ static PyObject *ZipImportError;
+@@ -53,6 +64,7 @@ static PyObject *read_directory(PyObject *archive);
  static PyObject *get_data(PyObject *archive, PyObject *toc_entry);
  static PyObject *get_module_code(ZipImporter *self, PyObject *fullname,
                                   int *p_ispackage, PyObject **p_modpath);
@@ -537,7 +547,51 @@ index f2cc245..bb22713 100644
  
  
  #define ZipImporter_Check(op) PyObject_TypeCheck(op, &ZipImporter_Type)
-@@ -289,20 +298,50 @@ check_is_directory(ZipImporter *self, PyObject* prefix, PyObject *path)
+@@ -67,6 +79,9 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
+ {
+     PyObject *path, *files, *tmp;
+     PyObject *filename = NULL;
++    PyObject *importlib = NULL;
++    PyObject *make_spec = NULL;
++    PyObject *extension_loader = NULL;
+     Py_ssize_t len, flen;
+ 
+     if (!_PyArg_NoKeywords("zipimporter()", kwds))
+@@ -161,11 +176,33 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
+     else
+         self->prefix = PyUnicode_New(0, 0);
+     Py_DECREF(path);
++
++    importlib = PyImport_ImportModule("importlib.machinery");
++    if (!importlib)
++        return -1;
++
++    make_spec = PyObject_GetAttrString(importlib, "ModuleSpec");
++    if (!make_spec)
++        goto error_imp;
++
++    extension_loader = PyObject_GetAttrString(importlib, "ExtensionFileLoader");
++    if (!extension_loader)
++        goto error_imp;
++
++    Py_DECREF(importlib);
++
++    self->make_spec = make_spec;
++    self->extension_loader = extension_loader;
++
+     return 0;
+ 
+ error:
+     Py_DECREF(path);
+     Py_XDECREF(filename);
++error_imp:
++    Py_XDECREF(importlib);
++    Py_XDECREF(make_spec);
++    Py_XDECREF(extension_loader);
+     return -1;
+ }
+ 
+@@ -286,20 +323,50 @@ check_is_directory(ZipImporter *self, PyObject* prefix, PyObject *path)
      return res;
  }
  
@@ -596,7 +650,7 @@ index f2cc245..bb22713 100644
      if (path == NULL)
          return MI_ERROR;
  
-@@ -312,6 +351,7 @@ get_module_info(ZipImporter *self, PyObject *fullname)
+@@ -309,6 +376,7 @@ get_module_info(ZipImporter *self, PyObject *fullname)
              Py_DECREF(path);
              return MI_ERROR;
          }
@@ -604,7 +658,7 @@ index f2cc245..bb22713 100644
          item = PyDict_GetItem(self->files, fullpath);
          Py_DECREF(fullpath);
          if (item != NULL) {
-@@ -322,10 +362,30 @@ get_module_info(ZipImporter *self, PyObject *fullname)
+@@ -319,10 +387,30 @@ get_module_info(ZipImporter *self, PyObject *fullname)
                  return MI_MODULE;
          }
      }
@@ -633,14 +687,51 @@ index f2cc245..bb22713 100644
 +}
 +
  typedef enum {
-     FL_ERROR,
-     FL_NOT_FOUND,
-@@ -440,6 +500,91 @@ zipimporter_find_loader(PyObject *obj, PyObject *args)
+     FL_ERROR = -1,       /* error */
+     FL_NOT_FOUND,        /* no loader or namespace portions found */
+@@ -453,6 +541,128 @@ zipimporter_find_loader(PyObject *obj, PyObject *args)
      return result;
  }
  
++static PyObject *import_extension(ZipImporter *self, PyObject *fullname, PyObject *path)
++{
++    PyObject *spec = NULL;
++    PyObject *mod = NULL;
++    PyObject *loader = NULL;
++    PyObject *args = NULL;
++    PyObject *kw = NULL;
++
++    args = PyTuple_Pack(2, fullname, Py_None);
++    if (!args)
++        return NULL;
++
++    kw = PyDict_New();
++    if (!kw)
++        goto error;
++    if (PyDict_SetItemString(kw, "origin", path) < 0)
++        goto error;
++
++    /* spec = PyObject_CallFunction(self->make_spec, "OOO", fullname, Py_None, path); */
++    spec = PyObject_Call(self->make_spec, args, kw);
++    if (!spec)
++        goto error;
++
++    loader = PyObject_CallFunctionObjArgs(self->extension_loader, fullname, path, NULL);
++    if (!loader)
++        goto error;
++
++    mod = PyObject_CallMethod(loader, "create_module", "O", spec);
++
++error:
++    Py_XDECREF(args);
++    Py_XDECREF(kw);
++    Py_XDECREF(spec);
++    Py_XDECREF(loader);
++    return mod;
++}
++
 +static PyObject *
-+import_solib(PyObject *fullname, PyObject *source)
++import_solib(ZipImporter *self, PyObject *fullname, PyObject *source)
 +{
 +    PyObject *mod = NULL;
 +    PyObject *tmppath = NULL;
@@ -672,7 +763,7 @@ index f2cc245..bb22713 100644
 +    if (!tmppath)
 +        goto exit;
 +
-+    mod = _PyImport_LoadDynamicModule(fullname, tmppath, NULL);
++    mod = import_extension(self, fullname, tmppath);
 +
 +exit:
 +    close(tmp);
@@ -717,7 +808,7 @@ index f2cc245..bb22713 100644
 +    if (data == NULL)
 +        Py_RETURN_NONE;
 +
-+    mod = import_solib(fullname, data);
++    mod = import_solib(self, fullname, data);
 +    Py_DECREF(data);
 +    if (!mod)
 +        Py_RETURN_NONE;
@@ -727,7 +818,7 @@ index f2cc245..bb22713 100644
  /* Load and return the module named by 'fullname'. */
  static PyObject *
  zipimporter_load_module(PyObject *obj, PyObject *args)
-@@ -456,6 +601,14 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
+@@ -469,6 +679,14 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
      if (PyUnicode_READY(fullname) == -1)
          return NULL;
  
@@ -742,7 +833,7 @@ index f2cc245..bb22713 100644
      code = get_module_code(self, fullname, &ispackage, &modpath);
      if (code == NULL)
          goto error;
-@@ -1369,6 +1522,40 @@ get_code_from_data(ZipImporter *self, int ispackage, int isbytecode,
+@@ -1456,6 +1674,40 @@ get_code_from_data(ZipImporter *self, int ispackage, int isbytecode,
      return code;
  }
  
@@ -783,7 +874,7 @@ index f2cc245..bb22713 100644
  /* Get the code object associated with the module specified by
     'fullname'. */
  static PyObject *
-@@ -1378,11 +1565,26 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1465,11 +1717,26 @@ get_module_code(ZipImporter *self, PyObject *fullname,
      PyObject *code = NULL, *toc_entry, *subname;
      PyObject *path, *fullpath = NULL;
      struct st_zip_searchorder *zso;
@@ -810,7 +901,7 @@ index f2cc245..bb22713 100644
      path = make_filename(self->prefix, subname);
      Py_DECREF(subname);
      if (path == NULL)
-@@ -1400,7 +1602,6 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1487,7 +1754,6 @@ get_module_code(ZipImporter *self, PyObject *fullname,
                                 self->archive, (int)SEP, fullpath);
          toc_entry = PyDict_GetItem(self->files, fullpath);
          if (toc_entry != NULL) {
@@ -818,7 +909,7 @@ index f2cc245..bb22713 100644
              int ispackage = zso->type & IS_PACKAGE;
              int isbytecode = zso->type & IS_BYTECODE;
  
-@@ -1413,6 +1614,17 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1500,6 +1766,17 @@ get_module_code(ZipImporter *self, PyObject *fullname,
              Py_CLEAR(fullpath);
              if (p_ispackage != NULL)
                  *p_ispackage = ispackage;
@@ -836,7 +927,7 @@ index f2cc245..bb22713 100644
              code = get_code_from_data(self, ispackage,
                                        isbytecode, mtime,
                                        toc_entry);
-@@ -1422,10 +1634,8 @@ get_module_code(ZipImporter *self, PyObject *fullname,
+@@ -1509,10 +1786,8 @@ get_module_code(ZipImporter *self, PyObject *fullname,
                  Py_DECREF(code);
                  continue;
              }
@@ -849,7 +940,7 @@ index f2cc245..bb22713 100644
              goto exit;
          }
          else
-@@ -1467,6 +1677,54 @@ static struct PyModuleDef zipimportmodule = {
+@@ -1554,6 +1829,51 @@ static struct PyModuleDef zipimportmodule = {
      NULL
  };
  
@@ -869,11 +960,8 @@ index f2cc245..bb22713 100644
 +
 +    snprintf(zip_searchorder_base[0].suffix, sizeof(zip_searchorder_base[0].suffix),
 +             "%c__pycache__%c__init__.%s.pyc", SEP, SEP, _PySys_ImplCacheTag);
-+    snprintf(zip_searchorder_base[1].suffix, sizeof(zip_searchorder_base[1].suffix),
-+             "%c__pycache__%c__init__.%s.pyo", SEP, SEP, _PySys_ImplCacheTag);
-+
-+    /* Correct directory separator */
-+    zip_searchorder_base[2].suffix[0] = SEP;
++    snprintf(zip_searchorder_base[1].suffix, sizeof(zip_searchorder_base[0].suffix),
++             "%c__init__.py", SEP);
 +
 +    zip_searchorder = PyMem_Malloc(sizeof(struct st_zip_searchorder) *
 +                                   (zip_searchorder_base_len + get_dynload_file_tab_len() + 1));
@@ -904,24 +992,13 @@ index f2cc245..bb22713 100644
  PyMODINIT_FUNC
  PyInit_zipimport(void)
  {
-@@ -1475,20 +1733,8 @@ PyInit_zipimport(void)
+@@ -1562,9 +1882,8 @@ PyInit_zipimport(void)
      if (PyType_Ready(&ZipImporter_Type) < 0)
          return NULL;
  
 -    /* Correct directory separator */
 -    zip_searchorder[0].suffix[0] = SEP;
 -    zip_searchorder[1].suffix[0] = SEP;
--    zip_searchorder[2].suffix[0] = SEP;
--    if (Py_OptimizeFlag) {
--        /* Reverse *.pyc and *.pyo */
--        struct st_zip_searchorder tmp;
--        tmp = zip_searchorder[0];
--        zip_searchorder[0] = zip_searchorder[1];
--        zip_searchorder[1] = tmp;
--        tmp = zip_searchorder[3];
--        zip_searchorder[3] = zip_searchorder[4];
--        zip_searchorder[4] = tmp;
--    }
 +    if (init_search_order() < 0)
 +        return NULL;
  

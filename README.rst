@@ -70,7 +70,7 @@ Create a new virtualenv and activate it with::
     exxo venv /tmp/myenv
     . /tmp/myenv/bin/activate
 
-The default Python version is 3.4. Use ``exxo venv -p 2.7`` for Python
+The default Python version is 3.5. Use ``exxo venv -p 2.7`` for Python
 2.7.
 
 You can use the virtualenv in regular way. To build the target binary::
@@ -223,7 +223,7 @@ Here's a list of functions and modules patched so far:
 Building exxo from sources
 --------------------------
 
-Building was tested only on Ubuntu. Python 3 is also required.
+Building was tested only on Ubuntu. Python 3.5 is also required.
 
 Install build dependencies with::
 
