@@ -59,10 +59,7 @@ NCURSES_CONFIGURE_ARGS = [
 
 
 def ensure_dir_exists(d):
-    try:
-        d.mkdir(parents=True)
-    except FileExistsError:
-        pass
+    d.mkdir(parents=True, exist_ok=True)
 
 
 def download_url(url, dst_file):
