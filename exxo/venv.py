@@ -42,7 +42,7 @@ VIRTUAL_ENV_PYRUN_VERSION="{{ pyrun_version }}"
 export VIRTUAL_ENV_PYRUN_VERSION
 
 _OLD_PYTHONPATH="$PYTHONPATH"
-PYTHONPATH="$VIRTUAL_ENV/pip/setuptools.egg:$VIRTUAL_ENV/pip/pip.egg:$PYTHONPATH"
+PYTHONPATH="$VIRTUAL_ENV/pip:$PYTHONPATH"
 export PYTHONPATH
 
 _OLD_VIRTUAL_PATH="$PATH"
@@ -80,20 +80,16 @@ import pkg_resources
 import pip
 import pip._vendor.pkg_resources
 
-envdir = os.environ['VIRTUAL_ENV']
-eggdir = os.path.join(envdir, 'pip')
-setuptools_egg = os.path.join(eggdir, 'setuptools.egg')
-pip_egg = os.path.join(eggdir, 'pip.egg')
+eggdir = os.path.join(os.environ['VIRTUAL_ENV'], 'pip')
 
-for d in (eggdir, setuptools_egg, pip_egg):
-    try:
-        pkg_resources.working_set.entries.remove(d)
-    except ValueError:
-        pass
-    try:
-        pip._vendor.pkg_resources.working_set.entries.remove(d)
-    except ValueError:
-        pass
+try:
+    pkg_resources.working_set.entries.remove(eggdir)
+except ValueError:
+    pass
+try:
+    pip._vendor.pkg_resources.working_set.entries.remove(eggdir)
+except ValueError:
+    pass
 
 for p in ('setuptools', 'pip'):
     pkg_resources.working_set.by_key.pop(p, None)

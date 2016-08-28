@@ -5,8 +5,10 @@ import shutil
 import tarfile
 import pkgutil
 import argparse
+import tempfile
 from pathlib import Path
 from urllib.request import urlopen
+from glob import glob
 import jinja2
 
 
@@ -24,13 +26,9 @@ PYTHON_VERSION_MAP = {
 }
 
 PYRUN_VERSION = '2.2.1'
-SETUPTOOLS_VERSION = '19.2'
-PIP_VERSION = '7.1.2'
 NCURSES_VERSION = '5.9+20150516'
 PYRUN_SRC_URL = 'https://downloads.egenix.com/python/egenix-pyrun-{}.tar.gz'.format(PYRUN_VERSION)
 PYRUN_SRC_DIR = 'egenix-pyrun-{}'.format(PYRUN_VERSION)
-SETUPTOOLS_URL = 'https://pypi.python.org/packages/source/s/setuptools/setuptools-{}.tar.gz'.format(SETUPTOOLS_VERSION)
-PIP_URL = 'https://pypi.python.org/packages/source/p/pip/pip-{}.tar.gz'.format(PIP_VERSION)
 NCURSES_URL = 'https://launchpad.net/ubuntu/+archive/primary/+files/ncurses_{}.orig.tar.gz'.format(NCURSES_VERSION)
 BUILD_DIR = 'build'
 
@@ -128,24 +126,20 @@ class Bootstrap:
         shutil.move(str(srcdir / 'lib'), str(self.ncurses_dir))
         shutil.move(str(srcdir / 'include'), str(self.ncurses_dir))
 
+    def download_from_pip(self, package, dst_file):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subprocess.check_call(['pip', 'download', '--no-deps', '-d', tmpdir, package])
+            whl_files = glob(str(Path(tmpdir) / '*.whl'))
+            if len(whl_files) != 1:
+                raise RuntimeError('{}: zero or more than one whl file downloaded: {}'
+                                   .format(package, whl_files))
+            shutil.move(whl_files[0], str(dst_file))
+
     def install_setuptools(self):
-        download_and_unpack(SETUPTOOLS_URL, self.builddir / 'setuptools.tar.gz', self.builddir)
-        srcdir = self.builddir / 'setuptools-{}'.format(SETUPTOOLS_VERSION)
-        setup_py = srcdir / 'setup.py'
-        subprocess.check_call([str(self.pyrun), str(setup_py), 'bdist_egg'])
-        egg = srcdir / 'dist' / 'setuptools-{}-py{}.egg'.format(SETUPTOOLS_VERSION, self.python_major_version)
-        egg.rename(self.final_dstdir / 'setuptools.egg')
+        self.download_from_pip('setuptools', self.final_dstdir / 'setuptools.whl')
 
     def install_pip(self):
-        download_and_unpack(PIP_URL, self.builddir / 'pip.tar.gz', self.builddir)
-        setuptools_egg = (self.final_dstdir / 'setuptools.egg').resolve()
-        pip_src_dir = self.builddir / 'pip-{}'.format(PIP_VERSION)
-        setup_py = pip_src_dir / 'setup.py'
-        env = os.environ.copy()
-        env['PYTHONPATH'] = '{}:{}'.format(setuptools_egg, env.get('PYTHONPATH', ''))
-        subprocess.check_call([str(self.pyrun), str(setup_py), 'bdist_egg'], cwd=str(pip_src_dir), env=env)
-        egg = pip_src_dir / 'dist' / 'pip-{}-py{}.egg'.format(PIP_VERSION, self.python_major_version)
-        egg.rename(self.final_dstdir / 'pip.egg')
+        self.download_from_pip('pip', self.final_dstdir / 'pip.whl')
 
     def render_setup_file(self):
         fn = 'Setup.PyRun-{}'.format(self.python_major_version)

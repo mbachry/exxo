@@ -7,6 +7,7 @@ import configparser
 import pkgutil
 import tarfile
 import tempfile
+import zipfile
 import io
 import zipapp
 from pathlib import Path
@@ -63,10 +64,10 @@ def create_virtualenv(args):
     with tarfile.open(fileobj=include_tar) as tar:
         tar.extractall(str(envdir))
     # install setuptools & pip
-    with (pipdir / 'setuptools.egg').open('wb') as fp:
-        fp.write(pkgutil.get_data(__package__, str(builddir / 'setuptools.egg')))
-    with (pipdir / 'pip.egg').open('wb') as fp:
-        fp.write(pkgutil.get_data(__package__, str(builddir / 'pip.egg')))
+    for fn in ('setuptools.whl', 'pip.whl'):
+        data = pkgutil.get_data(__package__, str(builddir / fn))
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            zf.extractall(str(pipdir))
     pip_bin = bindir / 'pip'
     with (pip_bin).open('w') as fp:
         fp.write(PIP_SCRIPT)
