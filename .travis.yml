@@ -3,7 +3,7 @@ language: python
 dist: trusty
 
 python:
-  - 3.4
+  - 3.5
 
 before_install:
   - echo 'deb-src http://archive.ubuntu.com/ubuntu trusty universe multiverse' | sudo tee /etc/apt/sources.list.d/trusty-src.list
@@ -12,6 +12,6 @@ before_install:
 
 install:
   - pip3 install -r requirements.txt
-  - python3 -m exxo.bootstrap all
+  - python3.5 -m exxo.bootstrap all
 
 script: make test

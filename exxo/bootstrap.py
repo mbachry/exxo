@@ -98,7 +98,8 @@ class Bootstrap:
         self.targetdir = self.builddir / 'target-{}'.format(self.python_major_version)
         self.final_dstdir = Path('exxo') / 'pyrun' / self.python_major_version
         ensure_dir_exists(self.final_dstdir)
-        self.pyrun_dir = self.builddir / PYRUN_SRC_DIR / 'PyRun'
+        self.pyrun_base_dir = self.builddir / ('{}-{}'.format(PYRUN_SRC_DIR, python_version))
+        self.pyrun_dir = self.pyrun_base_dir / 'PyRun'
         self.pyrun = self.targetdir / 'bin' / 'pyrun{}'.format(self.python_major_version)
         self.arch = os.uname().machine
         self.ncurses_dir = self.builddir / 'ncurses'
@@ -154,12 +155,15 @@ class Bootstrap:
         # download, unpack and patch pyrun
         pyrun_src_tar = self.builddir / 'pyrun.tar.gz'
         download_and_unpack(PYRUN_SRC_URL, pyrun_src_tar, self.builddir)
+        if self.pyrun_base_dir.exists():
+            shutil.rmtree(str(self.pyrun_base_dir))
+        (self.builddir / PYRUN_SRC_DIR).rename(self.pyrun_base_dir)
         pyrun_diff = pkgutil.get_data(__package__, 'patches/pyrun.diff')
-        patch(self.builddir / PYRUN_SRC_DIR, pyrun_diff)
+        patch(self.pyrun_base_dir, pyrun_diff)
         # giving full python source path as makefile target makes pyrun
         # download and patch python
         python_dir = self.pyrun_dir / 'Python-{}-{}'.format(self.python_full_version,
-                                                              self.meta['unicode'])
+                                                            self.meta['unicode'])
         self.pyrun_make(str(python_dir))
         # apply our python patches too
         py_patch_path = PYTHON_VERSION_MAP[self.python_major_version]['patch']
