@@ -6,7 +6,7 @@ def test_import_solib():
     res = spam.spam(5, 7)
     assert res == 12
     # solibs are unpacked to /tmp in current implementation
-    assert spam.__file__.startswith('/tmp/zipimport')
+    assert spam.__file__.startswith('/tmp/')
 
 
 def test_imports_module_from_pyc():

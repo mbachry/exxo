@@ -1,20 +1,94 @@
 diff --git a/Lib/_exxo_hack.py b/Lib/_exxo_hack.py
 new file mode 100644
-index 0000000..b8f294a
+index 0000000..5f45d4a
 --- /dev/null
 +++ b/Lib/_exxo_hack.py
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,138 @@
 +import sys
 +import os
 +import posix
 +import stat
 +import zipfile
 +import errno
++import sysconfig
++import shutil
++import tempfile
++import imp
 +
 +
-+if zipfile.is_zipfile(sys.executable):
-+    exe_zip = zipfile.ZipFile(sys.executable, 'r')
-+    exe_names = exe_zip.namelist()
++if not zipfile.is_zipfile(sys.executable):
++    class ModuleImporter(object):
++        def find_spec(self, fullname, path, target=None):
++            return
++
++        def find_module(self, fullname, path=None):
++            return
++
++        def load_module(self, fullname):
++            return
++else:
++    class ModuleImporter(object):
++        def __init__(self):
++            self.exe_zip = zipfile.ZipFile(sys.executable, 'r')
++            self.exe_names = self.exe_zip.namelist()
++            self.ext_suffix = sysconfig.get_config_var('SO')
++            self.tmpdir = tempfile.gettempdir()
++
++        def find_spec(self, fullname, path, target=None):
++            from importlib.machinery import ModuleSpec
++            path = self._get_path_in_zip(fullname)
++            if path is not None:
++                return ModuleSpec(fullname, self, origin=path)
++
++        def find_module(self, fullname, path=None):
++            path = self._get_path_in_zip(fullname)
++            return self if path else None
++
++        def load_module(self, fullname):
++            if fullname in sys.modules:
++                return sys.modules[fullname]
++            if sys.version_info[0] == 3:
++                spec = self.find_spec(fullname, None)
++                assert spec is not None
++                path = spec.origin
++            else:
++                path = self._get_path_in_zip(fullname)
++            assert path is not None
++            so_file = os.path.basename(path)
++            tmp_path = os.path.join(self.tmpdir, so_file)
++            tmp_files = [tmp_path]
++            try:
++                self._extract_so_file(path, tmp_path)
++                if sys.version_info[0] == 2:
++                    name = fullname.split('.')[-1]
++                    mod = imp.load_dynamic(name, tmp_path)
++                else:
++                    from importlib.machinery import ExtensionFileLoader
++                    loader = ExtensionFileLoader(fullname, tmp_path)
++                    mod = loader.create_module(spec)
++                return mod
++            finally:
++                self._delete_tmp_files(tmp_files)
++
++        def _extract_so_file(self, src, dst):
++            with self.exe_zip.open(src) as src:
++                with open(dst, 'wb') as dst:
++                    shutil.copyfileobj(src, dst)
++                    os.fchmod(dst.fileno(), 0o700)
++
++        def _get_path_in_zip(self, fullname):
++            path = '{}{}'.format(fullname.replace('.', '/'), self.ext_suffix)
++            return path if path in self.exe_names else None
++
++        def _delete_tmp_files(self, files):
++            for path in files:
++                try:
++                    os.unlink(path)
++                except OSError:
++                    pass
++
++
++exxo_importer = ModuleImporter()
 +zip_cache = {}
 +
 +
@@ -34,10 +108,10 @@ index 0000000..b8f294a
 +    if not zipfile.is_zipfile(sys.executable):
 +        raise exc(errno.ENOENT, filename)
 +    inzip_path = filename[len(sys.executable):].lstrip('/')
-+    if inzip_path not in exe_names:
++    if inzip_path not in exxo_importer.exe_names:
 +        # try a directory
 +        inzip_path = inzip_path + '/'
-+        if inzip_path not in exe_names:
++        if inzip_path not in exxo_importer.exe_names:
 +            raise exc(errno.ENOENT, filename)
 +    is_dir = inzip_path.endswith('/')
 +    return inzip_path, is_dir
@@ -45,13 +119,13 @@ index 0000000..b8f294a
 +
 +def get_file(filename):
 +    inzip_path, _ = _get_inzip_path(filename, IOError)
-+    return exe_zip.open(inzip_path)
++    return exxo_importer.exe_zip.open(inzip_path)
 +
 +
 +@cached
 +def stat_file(filename):
 +    inzip_path, is_dir = _get_inzip_path(filename, OSError)
-+    info = exe_zip.getinfo(inzip_path)
++    info = exxo_importer.exe_zip.getinfo(inzip_path)
 +    stat_result = list(os.stat(sys.executable))
 +    stat_result[6] = info.file_size
 +    if is_dir:
@@ -66,7 +140,8 @@ index 0000000..b8f294a
 +    inzip_path, is_dir = _get_inzip_path(fixed_directory, OSError)
 +    if not is_dir:
 +        raise OSError(errno.ENOTDIR, directory)
-+    return [n[len(inzip_path):] for n in exe_names if n != inzip_path and n.startswith(inzip_path)]
++    return [n[len(inzip_path):] for n in exxo_importer.exe_names
++            if n != inzip_path and n.startswith(inzip_path)]
 diff --git a/Lib/ctypes/__init__.py b/Lib/ctypes/__init__.py
 index e24cfd2..f234797 100644
 --- a/Lib/ctypes/__init__.py
@@ -417,253 +492,6 @@ index 4fc3ef7..4bce72e 100644
      }
      if ((d = PyList_New(0)) == NULL) {
          Py_BEGIN_ALLOW_THREADS
-diff --git a/Modules/zipimport.c b/Modules/zipimport.c
-index ee44cab..f9f51f0 100644
---- a/Modules/zipimport.c
-+++ b/Modules/zipimport.c
-@@ -2,15 +2,18 @@
- #include "structmember.h"
- #include "osdefs.h"
- #include "marshal.h"
-+#include "../Python/importdl.h"
- #include <time.h>
-+#include <assert.h>
- 
- 
- #define IS_SOURCE   0x0
- #define IS_BYTECODE 0x1
- #define IS_PACKAGE  0x2
-+#define IS_SOLIB    0x4
- 
- struct st_zip_searchorder {
--    char suffix[14];
-+    char suffix[64];
-     int type;
- };
- 
-@@ -19,15 +22,20 @@ struct st_zip_searchorder {
-    non-package .pyc, .pyo and .py entries. The .pyc and .pyo entries
-    are swapped by initzipimport() if we run in optimized mode. Also,
-    '/' is replaced by SEP there. */
--static struct st_zip_searchorder zip_searchorder[] = {
-+static struct st_zip_searchorder *zip_searchorder;
-+static struct st_zip_searchorder zip_searchorder_base[] = {
-     {"/__init__.pyc", IS_PACKAGE | IS_BYTECODE},
-     {"/__init__.pyo", IS_PACKAGE | IS_BYTECODE},
-     {"/__init__.py", IS_PACKAGE | IS_SOURCE},
-     {".pyc", IS_BYTECODE},
-     {".pyo", IS_BYTECODE},
--    {".py", IS_SOURCE},
--    {"", 0}
-+    {".py", IS_SOURCE}
- };
-+static const int zip_searchorder_base_len = sizeof(zip_searchorder_base) / sizeof(zip_searchorder_base[0]);
-+
-+extern PyObject *
-+_PyImport_LoadDynamicModule(char *name, char *pathname, FILE *fp);
-+extern const struct filedescr _PyImport_DynLoadFiletab[];
- 
- /* zipimporter object definition and support */
- 
-@@ -63,9 +71,6 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
-     char *path, *p, *prefix, buf[MAXPATHLEN+2];
-     size_t len;
- 
--    if (!_PyArg_NoKeywords("zipimporter()", kwds))
--        return -1;
--
-     if (!PyArg_ParseTuple(args, "s:zipimporter",
-                           &path))
-         return -1;
-@@ -304,6 +309,85 @@ zipimporter_find_module(PyObject *obj, PyObject *args)
-     return (PyObject *)self;
- }
- 
-+static PyObject *
-+import_solib(char *fullname, PyObject *source)
-+{
-+    PyObject *mod = NULL;
-+    char tmpbuf[] = "/tmp/zipimportXXXXXX";
-+    char *src;
-+    int tmp;
-+    Py_ssize_t srclen;
-+
-+    tmp = mkstemp(tmpbuf);
-+    if (tmp < 0) {
-+        PyErr_SetFromErrnoWithFilename(PyExc_OSError, tmpbuf);
-+        return NULL;
-+    }
-+
-+    if (PyString_AsStringAndSize(source, &src, &srclen) < 0)
-+        goto exit;
-+
-+    while (srclen) {
-+        int wrote = write(tmp, src, srclen);
-+        if (wrote < 0) {
-+            PyErr_SetFromErrnoWithFilename(PyExc_OSError, tmpbuf);
-+            goto exit;
-+        }
-+        src += wrote;
-+        srclen -= wrote;
-+    }
-+
-+    mod = _PyImport_LoadDynamicModule(fullname, tmpbuf, NULL);
-+
-+exit:
-+    close(tmp);
-+    unlink(tmpbuf);
-+    return mod;
-+}
-+
-+static PyObject *
-+maybe_import_solib(ZipImporter *self, char *fullname)
-+{
-+    PyObject *fullpath;
-+    PyObject *toc_entry = NULL, *data, *mod;
-+    char path[MAXPATHLEN + 1];
-+    char *subname;
-+    const struct filedescr *desc;
-+    int pathlen;
-+
-+    subname = get_subname(fullname);
-+    if (subname == NULL)
-+        Py_RETURN_NONE;
-+
-+    pathlen = make_filename(PyString_AsString(self->prefix), subname, path);
-+    if (pathlen < 0)
-+        Py_RETURN_NONE;
-+
-+    for (desc = _PyImport_DynLoadFiletab; desc->suffix != NULL; desc++) {
-+        fullpath = PyString_FromFormat("%s%s", path, desc->suffix);
-+        if (fullpath == NULL) {
-+            Py_RETURN_NONE;
-+        }
-+
-+        toc_entry = PyDict_GetItem(self->files, fullpath);
-+        Py_DECREF(fullpath);
-+        if (toc_entry != NULL)
-+            break;
-+    }
-+    if (toc_entry == NULL)
-+        return NULL;
-+
-+    data = get_data(PyString_AsString(self->archive), toc_entry);
-+    if (data == NULL)
-+        Py_RETURN_NONE;
-+
-+    mod = import_solib(fullname, data);
-+    Py_DECREF(data);
-+    if (!mod)
-+        Py_RETURN_NONE;
-+    return mod;
-+}
-+
- /* Load and return the module named by 'fullname'. */
- static PyObject *
- zipimporter_load_module(PyObject *obj, PyObject *args)
-@@ -317,6 +401,14 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
-                           &fullname))
-         return NULL;
- 
-+    mod = maybe_import_solib(self, fullname);
-+    if (mod) {
-+        if (mod == Py_None)
-+            return NULL;
-+        Py_DECREF(fullname);
-+        return mod;
-+    }
-+
-     code = get_module_code(self, fullname, &ispackage, &modpath);
-     if (code == NULL)
-         return NULL;
-@@ -1260,6 +1352,16 @@ get_module_code(ZipImporter *self, char *fullname,
-                 mtime = get_mtime_of_source(self, path);
-             if (p_ispackage != NULL)
-                 *p_ispackage = ispackage;
-+
-+            if (zso->type & IS_SOLIB) {
-+                if (p_modpath != NULL) {
-+                    PyObject *modpathobj = PyTuple_GetItem(toc_entry, 0);
-+                    Py_INCREF(p_modpath);
-+                    *p_modpath = PyString_AsString(modpathobj);
-+                }
-+                return NULL;
-+            }
-+
-             code = get_code_from_data(self, ispackage,
-                                       isbytecode, mtime,
-                                       toc_entry);
-@@ -1279,6 +1381,60 @@ get_module_code(ZipImporter *self, char *fullname,
-     return NULL;
- }
- 
-+static Py_ssize_t get_dynload_file_tab_len(void)
-+{
-+    int i = 0;
-+    while (_PyImport_DynLoadFiletab[i].suffix)
-+        i++;
-+    return i;
-+}
-+
-+static int init_search_order(void)
-+{
-+    struct st_zip_searchorder *zso;
-+    const struct filedescr *desc;
-+    int i;
-+
-+     /* Correct directory separator */
-+    zip_searchorder_base[0].suffix[0] = SEP;
-+    zip_searchorder_base[1].suffix[0] = SEP;
-+    zip_searchorder_base[2].suffix[0] = SEP;
-+     if (Py_OptimizeFlag) {
-+         /* Reverse *.pyc and *.pyo */
-+         struct st_zip_searchorder tmp;
-+        tmp = zip_searchorder_base[0];
-+        zip_searchorder_base[0] = zip_searchorder_base[1];
-+        zip_searchorder_base[1] = tmp;
-+        tmp = zip_searchorder_base[3];
-+        zip_searchorder_base[3] = zip_searchorder_base[4];
-+        zip_searchorder_base[4] = tmp;
-+    }
-+
-+    zip_searchorder = PyMem_Malloc(sizeof(struct st_zip_searchorder) *
-+                                   (zip_searchorder_base_len + get_dynload_file_tab_len() + 1));
-+    if (zip_searchorder == NULL) {
-+        PyErr_SetString(PyExc_MemoryError, "zipimport: out of memory");
-+        return -1;
-+    }
-+
-+    for (i = 0, zso = zip_searchorder_base; i < zip_searchorder_base_len; zso++, i++)
-+        zip_searchorder[i] = *zso;
-+
-+    for (desc = _PyImport_DynLoadFiletab; desc->suffix != NULL; desc++) {
-+        assert(strlen(desc->suffix) < sizeof(zso->suffix));
-+        zso = &zip_searchorder[i];
-+        memset(zso->suffix, 0, sizeof(zso->suffix));
-+        strncpy(zso->suffix, desc->suffix, sizeof(zso->suffix) - 1);
-+        zso->type = IS_SOLIB;
-+        i++;
-+    }
-+
-+    /* sentinel */
-+    zip_searchorder[i].suffix[0] = '\0';
-+    zip_searchorder[i].type = 0;
-+
-+    return 0;
-+}
- 
- /* Module init */
- 
-@@ -1304,6 +1460,9 @@ initzipimport(void)
-     if (PyType_Ready(&ZipImporter_Type) < 0)
-         return;
- 
-+    if (init_search_order() < 0)
-+        return;
-+
-     /* Correct directory separator */
-     zip_searchorder[0].suffix[0] = SEP;
-     zip_searchorder[1].suffix[0] = SEP;
 diff --git a/Python/bltinmodule.c b/Python/bltinmodule.c
 index 2977bcd..44eb09f 100644
 --- a/Python/bltinmodule.c

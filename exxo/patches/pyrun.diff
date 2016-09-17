@@ -776,13 +776,23 @@ index 96f6b43..3e52a52 100755
      # default prefix and exec_prefix
      if not exec_prefix:
 diff --git a/PyRun/Runtime/pyrun_template.py b/PyRun/Runtime/pyrun_template.py
-index 400a542..f94b883 100644
+index 400a542..fd67aef 100644
 --- a/PyRun/Runtime/pyrun_template.py
 +++ b/PyRun/Runtime/pyrun_template.py
-@@ -767,10 +767,12 @@ def pyrun_execute_script(pyrun_script, mode='file'):
+@@ -58,6 +58,7 @@ from pyrun_config import (
+     pyrun_prefix,
+     pyrun_bindir,
+     )
++from _exxo_hack import exxo_importer
+ 
+ ### Globals
+ 
+@@ -767,10 +768,14 @@ def pyrun_execute_script(pyrun_script, mode='file'):
  
  if __name__ == '__main__':
  
++    sys.meta_path.append(exxo_importer)
++
 +    exxo_force_interp = bool(os.environ.get('EXXO_FORCE_STANDALONE'))
 +
      # Determine run mode
@@ -793,7 +803,7 @@ index 400a542..f94b883 100644
          # Renaming the pyrun executable triggers app mode
          pyrun_mode = 'app'
  
-@@ -801,6 +803,9 @@ if __name__ == '__main__':
+@@ -801,6 +806,9 @@ if __name__ == '__main__':
  
          ### Run a script
  
