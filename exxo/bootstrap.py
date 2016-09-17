@@ -169,6 +169,12 @@ class Bootstrap:
         py_patch_path = PYTHON_VERSION_MAP[self.python_major_version]['patch']
         python_diff = pkgutil.get_data(__package__, str(py_patch_path))
         patch(python_dir, python_diff)
+        # copy frozen exxo modules to Python's stdlib
+        for fname in ('_exxo_importer.py', '_exxo_hack.py'):
+            pybuf = pkgutil.get_data(__package__, 'frozen/{}'.format(fname))
+            dst = python_dir / 'Lib' / fname
+            with dst.open('wb') as fp:
+                fp.write(pybuf)
         # configure ffi (for ctypes)
         ffi_config_script = python_dir / 'Modules' / '_ctypes' / 'libffi' / 'configure'
         ffi_build_dir = (python_dir / 'build' /

@@ -776,14 +776,14 @@ index 96f6b43..3e52a52 100755
      # default prefix and exec_prefix
      if not exec_prefix:
 diff --git a/PyRun/Runtime/pyrun_template.py b/PyRun/Runtime/pyrun_template.py
-index 400a542..fd67aef 100644
+index 400a542..98c4956 100644
 --- a/PyRun/Runtime/pyrun_template.py
 +++ b/PyRun/Runtime/pyrun_template.py
 @@ -58,6 +58,7 @@ from pyrun_config import (
      pyrun_prefix,
      pyrun_bindir,
      )
-+from _exxo_hack import exxo_importer
++from _exxo_importer import exxo_importer
  
  ### Globals
  

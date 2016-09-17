@@ -23,6 +23,8 @@ function run_inzip_test {
 }
 
 
+py.test unit
+
 run_inzip_test 3.5
 # TODO: figure out why --assert=plain is needed
 run_inzip_test 2.7 --assert=plain
