@@ -114,10 +114,12 @@ class ModuleImporter(object):
         # extract dependencies from zip, if any. put them in the same
         # temporary directory
         origin = os.path.dirname(zip_path)
-        rpath = os.path.normpath(rpath.replace('$ORIGIN', origin))
+        rpath_parts = [r.replace('$ORIGIN', origin) for r in rpath.split(':')]
+        rpath_parts.reverse()
+        print('@@ rpath parts', rpath_parts)
         for lib in dyntab.get(_exxo_elf.DT_NEEDED, []):
+            print('@@ DT_NEEDED lib', lib)
             lib = lib.decode()
-            rpath_parts = reversed(rpath.split(':'))
             for rp in rpath_parts:
                 path = os.path.normpath('{}/{}'.format(rp, lib))
                 print('@@ normpath', path)
@@ -127,6 +129,7 @@ class ModuleImporter(object):
                     print('@@ extract', path, dst)
                     # extract dependecies recursively
                     self._handle_rpath(path, dst, cur_rpath=rpath)
+        print('@@ DONE')
 
 
 exxo_importer = ModuleImporter()
