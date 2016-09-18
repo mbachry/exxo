@@ -35,11 +35,22 @@ def test_zipimport_hook(testdir, tmpdir):
 
 @pytest.yield_fixture(scope='session')
 def zip_app():
-    inzip_dir = base_dir / 'tests' / 'inzip'
-    subprocess.check_call(['python', 'setup.py', 'build_ext', '--inplace'], cwd=str(inzip_dir))
+    testdir = base_dir / 'tests'
+    subprocess.check_call(['python', 'setup.py', 'build_ext', '--inplace'],
+                          cwd=str(testdir / 'inzip'))
+    subprocess.check_call(['python', 'setup.py', 'build_ext', '--inplace'],
+                          cwd=str(testdir / 'testapp'))
     tmpdir = tempfile.mkdtemp()
     sofile = 'spam{}'.format(sysconfig.get_config_var('SO'))
-    shutil.copy(str(inzip_dir / 'inzip' / 'pkg' / sofile), tmpdir)
+    rpath_sofile = 'rpath{}'.format(sysconfig.get_config_var('SO'))
+    shutil.copy(str(testdir / 'inzip' / 'inzip' / 'pkg' / sofile), tmpdir)
+    # arrange rpath extension so its solib dependency sits in a
+    # directory below it (as defined in RPATH)
+    subdir = Path(tmpdir) / 'sub' / 'sub2'
+    subdir.mkdir(parents=True)
+    shutil.copy(str(testdir / 'testapp' / rpath_sofile), str(subdir))
+    shutil.copy(str(testdir / 'inzip' / 'inzip' / 'spamtypes.so'),
+                str(Path(tmpdir) / 'sub' / 'libspamtypes.so'))
     with (Path(tmpdir) / 'foo.py').open('w') as fp:
         fp.write("""
         def main():
@@ -56,5 +67,10 @@ def zip_app():
 def importer(zip_app):
     with mock.patch.object(sys, 'executable', zip_app):
         importer = ModuleImporter()
-        yield importer
+        meta = sys.meta_path + [importer]
+        path = sys.path + [zip_app]
+        with mock.patch.object(sys, 'meta_path', meta):
+            with mock.patch.object(sys, 'path', path):
+                yield importer
     sys.modules.pop('spam', None)
+    sys.modules.pop('sub.rpath', None)

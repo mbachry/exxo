@@ -170,7 +170,7 @@ class Bootstrap:
         python_diff = pkgutil.get_data(__package__, str(py_patch_path))
         patch(python_dir, python_diff)
         # copy frozen exxo modules to Python's stdlib
-        for fname in ('_exxo_importer.py', '_exxo_hack.py'):
+        for fname in ('_exxo_importer.py', '_exxo_hack.py', '_exxo_elf.py'):
             pybuf = pkgutil.get_data(__package__, 'frozen/{}'.format(fname))
             dst = python_dir / 'Lib' / fname
             with dst.open('wb') as fp:

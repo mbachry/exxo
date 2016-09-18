@@ -5,6 +5,7 @@ import sysconfig
 import shutil
 import tempfile
 import imp
+import warnings
 
 
 class ModuleImporter(object):
@@ -15,7 +16,6 @@ class ModuleImporter(object):
         self.exe_zip = zipfile.ZipFile(sys.executable, 'r')
         self.exe_names = self.exe_zip.namelist()
         self.ext_suffix = sysconfig.get_config_var('SO')
-        self.tmpdir = tempfile.gettempdir()
 
     def find_spec(self, fullname, path, target=None):
         if self.exe_zip is None:
@@ -44,10 +44,11 @@ class ModuleImporter(object):
             path = self._get_path_in_zip(fullname)
         assert path is not None
         so_file = os.path.basename(path)
-        tmp_path = os.path.join(self.tmpdir, so_file)
-        tmp_files = [tmp_path]
+        tmpdir = tempfile.mkdtemp()
+        tmp_path = os.path.join(tmpdir, so_file)
         try:
             self._extract_so_file(path, tmp_path)
+            self._handle_rpath(path, tmp_path)
             if sys.version_info[0] == 2:
                 name = fullname.split('.')[-1]
                 mod = imp.load_dynamic(name, tmp_path)
@@ -56,9 +57,13 @@ class ModuleImporter(object):
                 loader = ExtensionFileLoader(fullname, tmp_path)
                 spec.origin = tmp_path
                 mod = loader.create_module(spec)
+            sys.modules[fullname] = mod
             return mod
         finally:
-            self._delete_tmp_files(tmp_files)
+            try:
+                shutil.rmtree(tmpdir)
+            except OSError:
+                pass
 
     def _extract_so_file(self, src, dst):
         with self.exe_zip.open(src) as src:
@@ -70,12 +75,50 @@ class ModuleImporter(object):
         path = '{}{}'.format(fullname.replace('.', '/'), self.ext_suffix)
         return path if path in self.exe_names else None
 
-    def _delete_tmp_files(self, files):
-        for path in files:
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
+    def _handle_rpath(self, zip_path, solib_path, cur_rpath=None):
+        if sys.platform not in ('linux', 'linux2'):
+            return
+        try:
+            import _exxo_elf
+        except ImportError:
+            # for unit tests
+            from . import _exxo_elf
+        dst_dir = os.path.dirname(solib_path)
+        elf = _exxo_elf.readelf(solib_path)
+        dyntab = elf['dynamic']
+        rpath = dyntab.get(_exxo_elf.DT_RPATH, [])
+        if not rpath:
+            if cur_rpath is None:
+                return
+            # if RPATH was specified as a param, we go with this one,
+            # even if given solib has no RPATH section - this allows
+            # handling dependecies recursively
+            rpath = cur_rpath
+        else:
+            rpath = rpath[0].decode()
+            # replace current RPATH with $ORIGIN and copy referenced
+            # libraries to the same directory as extension module solib
+            new_rpath = '$ORIGIN'
+            # TODO: if RPATH is shorter than $ORIGIN all we do is hope
+            # RPATH is not needed at all
+            if len(rpath) < len(new_rpath):
+                warnings.warn("can't overwrite RPATH {} with {}".format(rpath, new_rpath))
+                return
+            with open(solib_path, 'rb+') as fp:
+                fp.seek(elf['rpath_offset'], os.SEEK_SET)
+                fp.write(new_rpath.encode() + b'\0')
+        # extract dependencies from zip, if any. put them in the same
+        # temporary directory
+        origin = os.path.dirname(zip_path)
+        rpath = os.path.normpath(rpath.replace('$ORIGIN', origin))
+        for lib in dyntab.get(_exxo_elf.DT_NEEDED, []):
+            lib = lib.decode()
+            path = os.path.normpath('{}/{}'.format(rpath, lib))
+            if path in self.exe_names:
+                dst = os.path.join(dst_dir, lib)
+                self._extract_so_file(path, dst)
+                # extract dependecies recursively
+                self._handle_rpath(path, dst, cur_rpath=rpath)
 
 
 exxo_importer = ModuleImporter()

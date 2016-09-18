@@ -9,7 +9,10 @@ def test_find_solib_in_zip_missing(importer):
 
 
 def test_import_solib_from_zip(importer):
-    mod = importer.load_module('spam')
-    assert mod is not None
-    func = getattr(mod, 'spam')
-    assert func(2, 6) == 8
+    import spam
+    assert spam.spam(2, 6) == 8
+
+
+def test_import_rpath_solib_from_zip(importer):
+    from sub.sub2 import rpath
+    assert rpath.spam(2, 6) == 8

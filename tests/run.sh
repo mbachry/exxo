@@ -11,7 +11,7 @@ function run_inzip_test {
     pyversion="$1"
     shift
     args="$@"
-    rm -rf inzip/env inzip/dist
+    rm -rf inzip/{env,dist,build}
     _exxo venv -p "$pyversion" inzip/env
     set +u
     . inzip/env/bin/activate
@@ -23,7 +23,7 @@ function run_inzip_test {
 }
 
 
-py.test unit
+py.test -v unit
 
 run_inzip_test 3.5
 # TODO: figure out why --assert=plain is needed
