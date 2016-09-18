@@ -117,14 +117,16 @@ class ModuleImporter(object):
         rpath = os.path.normpath(rpath.replace('$ORIGIN', origin))
         for lib in dyntab.get(_exxo_elf.DT_NEEDED, []):
             lib = lib.decode()
-            path = os.path.normpath('{}/{}'.format(rpath, lib))
-            print('@@ normpath', path)
-            if path in self.exe_names:
-                dst = os.path.join(dst_dir, lib)
-                self._extract_so_file(path, dst)
-                print('@@ extract', path, dst)
-                # extract dependecies recursively
-                self._handle_rpath(path, dst, cur_rpath=rpath)
+            rpath_parts = reversed(rpath.split(':'))
+            for rp in rpath_parts:
+                path = os.path.normpath('{}/{}'.format(rp, lib))
+                print('@@ normpath', path)
+                if path in self.exe_names:
+                    dst = os.path.join(dst_dir, lib)
+                    self._extract_so_file(path, dst)
+                    print('@@ extract', path, dst)
+                    # extract dependecies recursively
+                    self._handle_rpath(path, dst, cur_rpath=rpath)
 
 
 exxo_importer = ModuleImporter()

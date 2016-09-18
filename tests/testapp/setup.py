@@ -17,7 +17,7 @@ ext = Extension(
     sources=['rpath.c'],
     library_dirs=[str(inzip_dir)],
     libraries=['spamtypes'],
-    extra_link_args=['-Wl,-rpath,$ORIGIN/..']
+    extra_link_args=['-Wl,-rpath,/some/path:$ORIGIN/..']
 )
 
 
