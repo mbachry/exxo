@@ -14,5 +14,11 @@ def test_import_solib_from_zip(importer):
 
 
 def test_import_rpath_solib_from_zip(importer):
+    # dump zip contents for diagnostics
+    import sys
+    import zipfile
+    from pprint import pprint
+    zf = zipfile.ZipFile(sys.executable, 'r')
+    pprint(zf.namelist())
     from sub.sub2 import rpath
     assert rpath.spam(2, 6) == 8

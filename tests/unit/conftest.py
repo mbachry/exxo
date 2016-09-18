@@ -33,12 +33,17 @@ def test_zipimport_hook(testdir, tmpdir):
     assert 'INTERNALERROR>' not in result.stdout.str()
 
 
+def _create_init_py(path):
+    with (path / '__init__.py').open('w'):
+        pass
+
+
 @pytest.yield_fixture(scope='session')
 def zip_app():
     testdir = base_dir / 'tests'
-    subprocess.check_call(['python', 'setup.py', 'build_ext', '--inplace'],
+    subprocess.check_call(['python3', 'setup.py', 'build_ext', '--inplace'],
                           cwd=str(testdir / 'inzip'))
-    subprocess.check_call(['python', 'setup.py', 'build_ext', '--inplace'],
+    subprocess.check_call(['python3', 'setup.py', 'build_ext', '--inplace'],
                           cwd=str(testdir / 'testapp'))
     tmpdir = tempfile.mkdtemp()
     sofile = 'spam{}'.format(sysconfig.get_config_var('SO'))
@@ -48,6 +53,8 @@ def zip_app():
     # directory below it (as defined in RPATH)
     subdir = Path(tmpdir) / 'sub' / 'sub2'
     subdir.mkdir(parents=True)
+    _create_init_py(Path(tmpdir) / 'sub')
+    _create_init_py(subdir)
     shutil.copy(str(testdir / 'testapp' / rpath_sofile), str(subdir))
     shutil.copy(str(testdir / 'inzip' / 'inzip' / 'spamtypes.so'),
                 str(Path(tmpdir) / 'sub' / 'libspamtypes.so'))
@@ -73,4 +80,4 @@ def importer(zip_app):
             with mock.patch.object(sys, 'path', path):
                 yield importer
     sys.modules.pop('spam', None)
-    sys.modules.pop('sub.rpath', None)
+    sys.modules.pop('sub.sub2.rpath', None)
