@@ -23,6 +23,7 @@ function run_inzip_test {
 }
 
 
+make -C inzip clean
 py.test -v unit
 
 run_inzip_test 3.5
