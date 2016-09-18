@@ -76,6 +76,8 @@ class ModuleImporter(object):
         return path if path in self.exe_names else None
 
     def _handle_rpath(self, zip_path, solib_path, cur_rpath=None):
+        print('@@@@', zip_path, solib_path, cur_rpath)
+        print('@@ platform', sys.platform)
         if sys.platform not in ('linux', 'linux2'):
             return
         try:
@@ -87,6 +89,7 @@ class ModuleImporter(object):
         elf = _exxo_elf.readelf(solib_path)
         dyntab = elf['dynamic']
         rpath = dyntab.get(_exxo_elf.DT_RPATH, [])
+        print('@@ rpath', rpath)
         if not rpath:
             if cur_rpath is None:
                 return
@@ -107,6 +110,7 @@ class ModuleImporter(object):
             with open(solib_path, 'rb+') as fp:
                 fp.seek(elf['rpath_offset'], os.SEEK_SET)
                 fp.write(new_rpath.encode() + b'\0')
+            print('@@ new_rpath', new_rpath)
         # extract dependencies from zip, if any. put them in the same
         # temporary directory
         origin = os.path.dirname(zip_path)
@@ -114,9 +118,11 @@ class ModuleImporter(object):
         for lib in dyntab.get(_exxo_elf.DT_NEEDED, []):
             lib = lib.decode()
             path = os.path.normpath('{}/{}'.format(rpath, lib))
+            print('@@ normpath', path)
             if path in self.exe_names:
                 dst = os.path.join(dst_dir, lib)
                 self._extract_so_file(path, dst)
+                print('@@ extract', path, dst)
                 # extract dependecies recursively
                 self._handle_rpath(path, dst, cur_rpath=rpath)
 
